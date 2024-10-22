@@ -6,11 +6,9 @@ Project Description: Facial expression, pain and depression are often intricatel
 Relevant Papers: 
 P. Lucey, J. F. Cohn, K. M. Prkachin, P. E. Solomon and I. Matthews, "Painful data: The UNBC-McMaster shoulder pain expression archive database," 2011 IEEE International Conference on Automatic Face & Gesture Recognition (FG).
 https://ieeexplore.ieee.org/abstract/document/5771462
+
 Hassan, Teena, et al. "Automatic detection of pain from facial expressions: a survey." IEEE transactions on pattern analysis and machine intelligence 43.6 (2019): 1815-1831.
 https://ieeexplore.ieee.org/abstract/document/8928510
 
 Li, Mi, et al. "Automatic diagnosis of depression based on facial expression information and deep convolutional neural network." IEEE Transactions on Computational Social Systems (2024).
-
 https://ieeexplore.ieee.org/abstract/document/10533228
-
-![image](https://github.com/user-attachments/assets/3ff7a55a-c510-4668-b218-7d4456bf037e)
