@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -11,9 +12,11 @@ transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-# Load datasets
-train_data = datasets.ImageFolder(root='data/train', transform=transform)
-val_data = datasets.ImageFolder(root='data/val', transform=transform)
+base_dir = os.path.dirname(os.path.abspath(__file__))
+train_dir = os.path.join(base_dir, '../data/train')
+val_dir = os.path.join(base_dir, '../data/val')
+train_data = datasets.ImageFolder(root=train_dir, transform=transform)
+val_data = datasets.ImageFolder(root=val_dir, transform=transform)
 
 train_loader = DataLoader(train_data, batch_size=32, shuffle=True)
 val_loader = DataLoader(val_data, batch_size=32, shuffle=False)
