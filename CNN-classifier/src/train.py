@@ -4,6 +4,9 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms, models
 from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+# classes are no_pain (0) and pain (1)
 
 # Define image transformations
 transform = transforms.Compose([
@@ -21,27 +24,28 @@ val_data = datasets.ImageFolder(root=val_dir, transform=transform)
 train_loader = DataLoader(train_data, batch_size=32, shuffle=True)
 val_loader = DataLoader(val_data, batch_size=32, shuffle=False)
 
-# Load pretrained VGG-19 model
-vgg19 = models.vgg19(pretrained=True)
+# load pretrained VGG-19 model
+vgg19 = models.vgg19(weights=True)
 for param in vgg19.parameters():
-    param.requires_grad = False  # Freeze layers
+    param.requires_grad = False  # freeze layers
 
-vgg19.classifier[6] = nn.Linear(4096, 2)  # Modify final layer for binary classification
+vgg19.classifier[6] = nn.Linear(4096, 2)  # modify final layer for binary classification
 
-# Move to GPU if available
+# use GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 vgg19.to(device)
 
-# Define loss and optimizer
+# define loss and optimizer
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(vgg19.classifier[6].parameters(), lr=0.001)
 
-# Training loop
+# training loop
 num_epochs = 10
 for epoch in range(num_epochs):
     vgg19.train()
     running_loss = 0.0
-    for inputs, labels in train_loader:
+    progress_bar = tqdm(train_loader, desc=f"Epoch [{epoch+1}/{num_epochs}]")
+    for inputs, labels in progress_bar:
         inputs, labels = inputs.to(device), labels.to(device)
         optimizer.zero_grad()
         outputs = vgg19(inputs)
@@ -49,8 +53,8 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
+        progress_bar.set_postfix(loss=running_loss/len(train_loader))
     
     print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {running_loss/len(train_loader)}")
 
-    # Validation phase (optional)
-    # Add validation logic here (similar to the code in the first answer)
+# TODO validation phase
