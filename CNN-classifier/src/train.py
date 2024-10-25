@@ -25,15 +25,13 @@ train_loader = DataLoader(train_data, batch_size=32, shuffle=True)
 val_loader = DataLoader(val_data, batch_size=32, shuffle=False)
 
 # load pretrained VGG-19 model
-vgg19 = models.vgg19(weights=True)
+# and use GPU if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+vgg19 = models.vgg19(weights=models.VGG19_Weights.IMAGENET1K_V1).to(device)
 for param in vgg19.parameters():
     param.requires_grad = False  # freeze layers
 
-vgg19.classifier[6] = nn.Linear(4096, 2)  # modify final layer for binary classification
-
-# use GPU if available
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-vgg19.to(device)
+vgg19.classifier[6] = nn.Linear(4096, 2).to(device)  # modify final layer for binary classification
 
 # define loss and optimizer
 criterion = nn.CrossEntropyLoss()
