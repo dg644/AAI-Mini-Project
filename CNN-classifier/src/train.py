@@ -6,6 +6,7 @@ from torchvision import datasets, transforms, models
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+
 # classes are no_pain (0) and pain (1)
 
 # Define image transformations
@@ -21,26 +22,26 @@ val_dir = os.path.join(base_dir, '../data/val')
 train_data = datasets.ImageFolder(root=train_dir, transform=transform)
 val_data = datasets.ImageFolder(root=val_dir, transform=transform)
 
-train_loader = DataLoader(train_data, batch_size=32, shuffle=True)
-val_loader = DataLoader(val_data, batch_size=32, shuffle=False)
+train_loader = DataLoader(train_data, batch_size=64, shuffle=True)
+val_loader = DataLoader(val_data, batch_size=64, shuffle=False)
 
 # load pretrained VGG-19 model
-vgg19 = models.vgg19(weights=True)
+# and use GPU if available
+CUDA_VISIBLE_DEVICES=0
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+vgg19 = models.vgg19(weights=models.VGG19_Weights.IMAGENET1K_V1).to(device)
 for param in vgg19.parameters():
     param.requires_grad = False  # freeze layers
 
-vgg19.classifier[6] = nn.Linear(4096, 2)  # modify final layer for binary classification
-
-# use GPU if available
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-vgg19.to(device)
+vgg19.classifier[6] = nn.Linear(4096, 2).to(device)  # modify final layer for binary classification
 
 # define loss and optimizer
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(vgg19.classifier[6].parameters(), lr=0.001)
 
 # training loop
-num_epochs = 10
+num_epochs = 5
 for epoch in range(num_epochs):
     vgg19.train()
     running_loss = 0.0
@@ -56,5 +57,9 @@ for epoch in range(num_epochs):
         progress_bar.set_postfix(loss=running_loss/len(train_loader))
     
     print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {running_loss/len(train_loader)}")
+
+# Save the model after each epoch
+model_save_path = os.path.join(base_dir, '../model', f'vgg19_v0.pth')
+torch.save(vgg19.state_dict(), model_save_path)
 
 # TODO validation phase
