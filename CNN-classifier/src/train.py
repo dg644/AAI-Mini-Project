@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 # classes are no_pain (0) and pain (1)
 
-# Define image transformations
+# define image transformations
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -41,7 +41,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(vgg19.classifier[6].parameters(), lr=0.001)
 
 # training loop
-num_epochs = 5
+num_epochs = 10
 for epoch in range(num_epochs):
     vgg19.train()
     running_loss = 0.0
@@ -58,8 +58,28 @@ for epoch in range(num_epochs):
     
     print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {running_loss/len(train_loader)}")
 
-# Save the model after each epoch
+# save the model (put in loop to save after each epoch)
 model_save_path = os.path.join(base_dir, '../model', f'vgg19_v0.pth')
 torch.save(vgg19.state_dict(), model_save_path)
 
-# TODO validation phase
+# validation phase
+vgg19.eval()  # set model to evaluation mode
+val_loss = 0.0
+correct = 0
+total = 0
+
+with torch.no_grad():  # disable gradient computation
+    for inputs, labels in val_loader:
+        inputs, labels = inputs.to(device), labels.to(device)
+        outputs = vgg19(inputs)
+        loss = criterion(outputs, labels)
+        val_loss += loss.item()
+        
+        _, predicted = torch.max(outputs, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+
+val_loss /= len(val_loader)
+accuracy = 100 * correct / total
+
+print(f'Validation Loss: {val_loss:.4f}, Validation Accuracy: {accuracy:.2f}%')
