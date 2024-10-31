@@ -111,8 +111,12 @@ def split_images(project_dir, train_dir, val_dir, test_dir):
     train_pain_images, val_pain_images, test_pain_images = split_by_person(pain_dir)
     train_no_pain_images, val_no_pain_images, test_no_pain_images = split_by_person(no_pain_dir)
     
+    # duplicate training data for data augmentation, will be flipped horizontally - also using a different 
+    # metric for evaluation as the dataset is heavily skewed towards no pain
     for image in tqdm(train_pain_images, desc="Copying train pain images"):
-        shutil.copy(os.path.join(pain_dir, image), os.path.join(train_pain_dir, image))
+        for x in range(2):
+            name = f"{image.split('.')[0]}_{x}.png"
+            shutil.copy(os.path.join(pain_dir, image), os.path.join(train_pain_dir, name))
     for image in tqdm(val_pain_images, desc="Copying val pain images"):
         shutil.copy(os.path.join(pain_dir, image), os.path.join(val_pain_dir, image))
     for image in tqdm(test_pain_images, desc="Copying test pain images"):
@@ -147,6 +151,15 @@ def main():
 
     # uncomment to run split_images
     split_images(project_dir, train_dir, val_dir, test_dir)
+
+    train_pain_dir = os.path.join(project_dir, train_dir, 'pain')
+    train_no_pain_dir = os.path.join(project_dir, train_dir, 'no-pain')
+
+    num_train_pain = len(os.listdir(train_pain_dir))
+    num_train_no_pain = len(os.listdir(train_no_pain_dir))
+
+    print(f"Number of training pain images: {num_train_pain}")
+    print(f"Number of training no pain images: {num_train_no_pain}")
 
 if __name__ == '__main__':
     main()

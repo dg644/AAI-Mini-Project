@@ -5,6 +5,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms, models
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import time
 
 
 # classes are no_pain (0) and pain (1)
@@ -13,7 +14,8 @@ from tqdm import tqdm
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    transforms.RandomHorizontalFlip(p=0.5),
 ])
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -46,7 +48,7 @@ for epoch in range(num_epochs):
     vgg19.train()
     running_loss = 0.0
     progress_bar = tqdm(train_loader, desc=f"Epoch [{epoch+1}/{num_epochs}]")
-    for inputs, labels in progress_bar:
+    for i, (inputs, labels) in enumerate(progress_bar):
         inputs, labels = inputs.to(device), labels.to(device)
         optimizer.zero_grad()
         outputs = vgg19(inputs)
@@ -55,6 +57,12 @@ for epoch in range(num_epochs):
         optimizer.step()
         running_loss += loss.item()
         progress_bar.set_postfix(loss=running_loss/len(train_loader))
+        
+        # Add a break every 100 batches to let hardware cool down
+        if i % 100 == 0 and i > 0:
+            print("Taking a short break to cool down...")
+            torch.cuda.empty_cache()
+            time.sleep(30)
     
     print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {running_loss/len(train_loader)}")
 
