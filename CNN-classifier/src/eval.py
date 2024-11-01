@@ -135,7 +135,7 @@ if __name__ == "__main__":
 
     # modify the classifier layer to match the checkpoint's shape
     vgg19.classifier[6] = torch.nn.Linear(4096, 2)
-    vgg19.load_state_dict(torch.load(os.path.join(base_dir, '../model/vgg19_v0.pth')))  # change the path to model
+    vgg19.load_state_dict(torch.load(os.path.join(base_dir, '../model/vgg19_v1.pth')))  # change the path to model
     vgg19.to(device)
 
     # define transform to be same as training
@@ -146,4 +146,4 @@ if __name__ == "__main__":
     ])
 
     # evaluate the model
-    evaluate_model(vgg19, device, base_dir)
+    evaluate_model_with_roc(vgg19, device, base_dir)
