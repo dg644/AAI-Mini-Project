@@ -1,3 +1,7 @@
 CNN-classifier/data/
 CNN-classifier/sorted-images/
 CNN-classifier/model/
+UNBC_dataset/
+ML-classifier/data/
+ML-classifier/sorted-images/
+ML-classifier/src/myenv/
