@@ -3,6 +3,7 @@ import glob
 import shutil
 import random
 from tqdm import tqdm
+from PIL import Image
 
 # PSPI 0 = no pain, 1 = trace, 2 = weak, >=3 = strong
 # just doing no pain and pain so 0 = no pain, >=1 = pain
@@ -128,9 +129,19 @@ def split_images(project_dir, train_dir, val_dir, test_dir):
 
     train_pain_images, val_pain_images, test_pain_images = split_by_person(pain_dir)
     train_no_pain_images, val_no_pain_images, test_no_pain_images = split_by_person(no_pain_dir)
-    
+
+    # duplicate training data for data augmentation, will be flipped horizontally - also using a different 
+    # metric for evaluation as the dataset is heavily skewed towards no pain
     for image in tqdm(train_pain_images, desc="Copying train pain images"):
-        shutil.copy(os.path.join(pain_dir, image), os.path.join(train_pain_dir, image))
+        #not flipped
+        name = f"{image.split('.')[0]}_{0}.png"
+        shutil.copy(os.path.join(pain_dir, image), os.path.join(train_pain_dir, name))
+
+        #flipped the duplicate
+        flipped_image = Image.open(os.path.join(pain_dir, image)).transpose(Image.FLIP_LEFT_RIGHT)
+        name = f"{image.split('.')[0]}_{1}.png"
+        flipped_image.save(os.path.join(train_pain_dir, name))
+
     for image in tqdm(val_pain_images, desc="Copying val pain images"):
         shutil.copy(os.path.join(pain_dir, image), os.path.join(val_pain_dir, image))
     for image in tqdm(test_pain_images, desc="Copying test pain images"):
@@ -161,10 +172,17 @@ def main():
     # print(labels['ll042t1aaaff022.png']) # 1 = pain (PSPI = 2)
 
     # uncomment to run sort_images
-    sort_images(image_dir, label_dir, project_dir, dataset_dir)
+    #sort_images(image_dir, label_dir, project_dir, dataset_dir)
 
     # uncomment to run split_images
     split_images(project_dir, train_dir, val_dir, test_dir)
+
+    train_pain_dir = os.path.join(project_dir, train_dir, 'pain')
+    train_no_pain_dir = os.path.join(project_dir, train_dir, 'no-pain')
+    num_train_pain = len(os.listdir(train_pain_dir))
+    num_train_no_pain = len(os.listdir(train_no_pain_dir))
+    print(f"Number of training pain images: {num_train_pain}")
+    print(f"Number of training no pain images: {num_train_no_pain}")
 
     # check number of no-pain images is correct
     # total_no_pain = len(os.listdir(os.path.join(project_dir,test_dir,'no-pain')) ) + len(os.listdir(os.path.join(project_dir,train_dir,'no-pain'))) + len(os.listdir(os.path.join(project_dir,val_dir,'no-pain')))
