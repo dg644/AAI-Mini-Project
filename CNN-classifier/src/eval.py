@@ -5,9 +5,8 @@ from torchvision import datasets, transforms, models
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-import numpy as np
-from sklearn.metrics import roc_curve, roc_auc_score
-import matplotlib.pyplot as plt
+from sklearn.metrics import roc_auc_score
+from sklearn.metrics import f1_score
 
 
 def evaluate_model(model, device, base_dir):
@@ -23,8 +22,9 @@ def evaluate_model(model, device, base_dir):
     correct = 0
     total = 0
 
-    all_losses = []
-    all_accuracies = []
+    all_labels = []
+    all_probs = []
+    all_preds = []
 
     with torch.no_grad():  # disable gradient computation
         for inputs, labels in tqdm(test_loader, desc="Evaluating", leave=False):
@@ -37,42 +37,35 @@ def evaluate_model(model, device, base_dir):
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
 
-            all_losses.append(loss.item())
-            all_accuracies.append(100 * (predicted == labels).sum().item() / labels.size(0))
+            # store labels and predicted probabilities
+            all_labels.extend(labels.cpu().numpy())
+            all_probs.extend(torch.softmax(outputs, dim=1)[:, 1].cpu().numpy())
+            all_preds.extend(predicted.cpu().numpy())
 
     test_loss /= len(test_loader)
     test_accuracy = 100 * correct / total
 
+    auc = roc_auc_score(all_labels, all_probs)
+    f1 = f1_score(all_labels, all_preds, average='weighted')
+
     print(f'Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.2f}%')
     print(f'Total: {total}, Correct: {correct}')
+    print(f'F1 Score: {f1:.4f}, ROC AUC: {auc:.4f}')
 
-    # Plot the loss
-    plt.figure()
-    plt.plot(all_losses, color='blue', lw=2, label='Loss')
-    plt.xlabel('Batch')
-    plt.ylabel('Loss')
-    plt.title('Test Loss per Batch')
-    plt.legend(loc="upper right")
-    plt.show()
-
-    # Plot the accuracy
-    plt.figure()
-    plt.plot(all_accuracies, color='green', lw=2, label='Accuracy')
-    plt.xlabel('Batch')
-    plt.ylabel('Accuracy (%)')
-    plt.title('Test Accuracy per Batch')
-    plt.legend(loc="lower right")
-    plt.show()
-
-    return test_accuracy
+    return test_accuracy, f1, auc
 
 
 
-def evaluate_model_with_roc(model, device, base_dir):
+def evaluate_gender_specific(model, device, base_dir, ids, gender):
     criterion = nn.CrossEntropyLoss()  # define the loss function
-        
+
     test_dir = os.path.join(base_dir, '../data/test')
     test_data = datasets.ImageFolder(root=test_dir, transform=transform)
+    
+    # filter the dataset to only include the specified ids
+    indices = [i for i, (path, _) in enumerate(test_data.samples) if any(id in path for id in ids)]
+    test_data = torch.utils.data.Subset(test_data, indices)
+    
     test_loader = DataLoader(test_data, batch_size=64, shuffle=False)
 
     model.to(device)
@@ -83,47 +76,30 @@ def evaluate_model_with_roc(model, device, base_dir):
 
     all_labels = []
     all_probs = []
+    all_preds = []
 
     with torch.no_grad():  # disable gradient computation
-        for inputs, labels in tqdm(test_loader, desc="Evaluating", leave=False):
+        for inputs, labels in tqdm(test_loader, desc=f"Evaluating {gender}", leave=False):
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             test_loss += loss.item()
-            
+
             _, predicted = torch.max(outputs, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
 
-            # Store labels and predicted probabilities
+            # store labels and predicted probabilities
             all_labels.extend(labels.cpu().numpy())
             all_probs.extend(torch.softmax(outputs, dim=1)[:, 1].cpu().numpy())
+            all_preds.extend(predicted.cpu().numpy())
 
     test_loss /= len(test_loader)
     test_accuracy = 100 * correct / total
-
-    print(f'Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.2f}%')
-    print(f'Total: {total}, Correct: {correct}')
-
-    # Calculate the ROC curve
-    fpr, tpr, thresholds = roc_curve(all_labels, all_probs)
-
-    # Calculate the AUC (Area Under the Curve)
     auc = roc_auc_score(all_labels, all_probs)
+    f1 = f1_score(all_labels, all_preds, average='weighted')
 
-    # Plot the ROC curve
-    plt.figure()
-    plt.plot(fpr, tpr, color='blue', lw=2, label='ROC curve (area = %0.2f)' % auc)
-    plt.plot([0, 1], [0, 1], color='gray', lw=2, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('Receiver Operating Characteristic (ROC) Curve')
-    plt.legend(loc="lower right")
-    plt.show()
-
-    return test_accuracy, auc
+    return test_accuracy, f1, auc
 
 
 
@@ -145,5 +121,51 @@ if __name__ == "__main__":
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    # evaluate the model
-    evaluate_model_with_roc(vgg19, device, base_dir)
+    male_ids = [
+        "048-aa048",
+        "052-dr052",
+        "064-ak064",
+        "095-tv095",
+        "096-bg096",
+        "097-gf097",
+        "101-mg101",
+        "103-jk103",
+        "109-ib109",
+        "115-jy115",
+        "120-kz120",
+        "123-jh123"
+    ]
+    male_ids = [id.split('-')[1] for id in male_ids]  # extract the id from the full id, after the -
+
+    female_ids = [
+        "042-ll042",
+        "043-jh043",
+        "047-jl047",
+        "049-bm049",
+        "059-fn059",
+        "066-mg066",
+        "080-bn080",
+        "092-ch092",
+        "106-nm106",
+        "107-hs107",
+        "108-th108",
+        "121-vw121",
+        "124-dn124"
+    ]
+    female_ids = [id.split('-')[1] for id in female_ids]  # extract the id from the full id, after the -
+
+    # # evaluate for male
+    # accuracy_M, f1_M, roc_auc_M = evaluate_gender_specific(vgg19, device, base_dir, male_ids, "Male")
+
+    # # evaluate for female
+    # accuracy_F, f1_F, roc_auc_F = evaluate_gender_specific(vgg19, device, base_dir, female_ids, "Female")
+
+    # print results
+    # print("Accuracy Male:", accuracy_M)
+    # print("Accuracy Female:", accuracy_F)
+    # print("F1 score Male:", f1_M)
+    # print("F1 score Female:", f1_F)
+    # print("ROC AUC score Male:", roc_auc_M)
+    # print("ROC AUC score Female:", roc_auc_F)
+
+    evaluate_model(vgg19, device, base_dir)
