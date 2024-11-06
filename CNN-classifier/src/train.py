@@ -6,11 +6,23 @@ from torchvision import datasets, transforms, models
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import time
+from sklearn.metrics import f1_score, roc_auc_score
+import random
+import numpy as np
 
 
 # classes are no_pain (0) and pain (1)
 
 # define image transformations
+# fix random seed for reproducibility
+random_seed = 42
+torch.manual_seed(random_seed)
+torch.cuda.manual_seed(random_seed)
+np.random.seed(random_seed)
+random.seed(random_seed)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -43,7 +55,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(vgg19.classifier[6].parameters(), lr=0.001)
 
 # training loop
-num_epochs = 10
+num_epochs = 5
 for epoch in range(num_epochs):
     vgg19.train()
     running_loss = 0.0
@@ -60,34 +72,64 @@ for epoch in range(num_epochs):
         
         # Add a break every 100 batches to let hardware cool down
         if i % 100 == 0 and i > 0:
-            print("Taking a short break to cool down...")
+            print("\nTaking a short break to cool down...")
             torch.cuda.empty_cache()
-            time.sleep(30)
+            time.sleep(10)
     
     print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {running_loss/len(train_loader)}")
 
+    # validation phase
+    vgg19.eval()  # set model to evaluation mode
+    val_loss = 0.0
+    correct = 0
+    total = 0
+    all_labels = []
+    all_preds = []
+
+    with torch.no_grad():  # disable gradient computation
+        progress_bar = tqdm(val_loader, desc="Validation")
+        for inputs, labels in progress_bar:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = vgg19(inputs)
+            loss = criterion(outputs, labels)
+            val_loss += loss.item()
+
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+            all_labels.extend(labels.cpu().numpy())
+            all_preds.extend(predicted.cpu().numpy())
+            progress_bar.set_postfix(loss=val_loss/len(val_loader), accuracy=100 * correct / total)
+
+    val_loss /= len(val_loader)
+    accuracy = 100 * correct / total
+    f1 = f1_score(all_labels, all_preds, average='weighted')
+    roc = roc_auc_score(all_labels, all_preds)
+    print(f'Epoch [{epoch+1}/{num_epochs}], Validation Loss: {val_loss:.4f}, Validation Accuracy: {accuracy:.2f}%')
+    print(f'Epoch [{epoch+1}/{num_epochs}], Validation F1 Score: {f1:.4f}, Validation ROC AUC: {roc:.4f}')
+
 # save the model (put in loop to save after each epoch)
-model_save_path = os.path.join(base_dir, '../model', f'vgg19_v0.pth')
+model_save_path = os.path.join(base_dir, '../model', f'vgg19_v2.pth')
 torch.save(vgg19.state_dict(), model_save_path)
 
-# validation phase
-vgg19.eval()  # set model to evaluation mode
-val_loss = 0.0
-correct = 0
-total = 0
+# # validation phase
+# vgg19.eval()  # set model to evaluation mode
+# val_loss = 0.0
+# correct = 0
+# total = 0
 
-with torch.no_grad():  # disable gradient computation
-    for inputs, labels in val_loader:
-        inputs, labels = inputs.to(device), labels.to(device)
-        outputs = vgg19(inputs)
-        loss = criterion(outputs, labels)
-        val_loss += loss.item()
+# with torch.no_grad():  # disable gradient computation
+#     for inputs, labels in val_loader:
+#         inputs, labels = inputs.to(device), labels.to(device)
+#         outputs = vgg19(inputs)
+#         loss = criterion(outputs, labels)
+#         val_loss += loss.item()
         
-        _, predicted = torch.max(outputs, 1)
-        total += labels.size(0)
-        correct += (predicted == labels).sum().item()
+#         _, predicted = torch.max(outputs, 1)
+#         total += labels.size(0)
+#         correct += (predicted == labels).sum().item()
 
-val_loss /= len(val_loader)
-accuracy = 100 * correct / total
+# val_loss /= len(val_loader)
+# accuracy = 100 * correct / total
 
-print(f'Validation Loss: {val_loss:.4f}, Validation Accuracy: {accuracy:.2f}%')
+# print(f'Validation Loss: {val_loss:.4f}, Validation Accuracy: {accuracy:.2f}%')
