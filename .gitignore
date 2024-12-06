@@ -1,6 +1,6 @@
-CNN-classifier/data/
-CNN-classifier/sorted-images/
-CNN-classifier/model/
+DL-classifier/data/
+DL-classifier/sorted-images/
+DL-classifier/model/
 UNBC_dataset/
 ML-classifier/data/
 ML-classifier/sorted-images/
