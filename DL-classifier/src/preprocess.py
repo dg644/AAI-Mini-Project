@@ -63,7 +63,7 @@ def split_by_person(image_dir):
     person_images = {}
     image_list = os.listdir(image_dir)
     for image in tqdm(image_list, desc="Processing images by person"):
-        person_id = image.split('t')[0]  # assuming person id is before 't' in filename
+        person_id = image[:5]  # assuming person id is the first 5 characters of the filename
         if person_id not in person_images:
             person_images[person_id] = []
         person_images[person_id].append(image)
@@ -134,7 +134,7 @@ def split_images(project_dir, train_dir, val_dir, test_dir):
 
 def main():
     dataset_dir = r'C:\Users\dylan\OneDrive - University of Cambridge\Part II\Affective AI\Project' # change this to the path of the dataset
-    project_dir = r'C:\Users\dylan\work\AAI-Mini-Project\CNN-classifier' # change this to the path of the project
+    project_dir = r'C:\Users\dylan\work\AAI-Mini-Project\DL-classifier' # change this to the path of the project
     image_dir = 'UNBC/Images'
     label_dir = 'UNBC/Frame_Labels/PSPI'
     train_dir = 'data/train'
