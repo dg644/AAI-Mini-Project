@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader, random_split
 from torchvision.datasets import ImageFolder
 from torchvision import datasets, transforms
 from torch.cuda.amp import GradScaler, autocast
-import timm  # Install timm: pip install timm
+import timm
 from tqdm import tqdm
 import os
 
@@ -13,8 +13,8 @@ import os
 # hyperparameters
 num_classes = 2  # pain or no_pain
 batch_size = 16
-image_size = 224  # For ViT
-learning_rate = 1e-4
+image_size = 224
+learning_rate = 0.0001
 num_epochs = 20
 accumulation_steps = 4  # simulate larger batch sizes
 
@@ -35,8 +35,8 @@ train_data = datasets.ImageFolder(root=train_dir, transform=transform)
 val_data = datasets.ImageFolder(root=val_dir, transform=transform)
 test_data = datasets.ImageFolder(root=test_dir, transform=transform)
 
-train_loader = DataLoader(train_data, batch_size=64, shuffle=True)
-val_loader = DataLoader(val_data, batch_size=64, shuffle=False)
+train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False)
 test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
 # load a pretrained Vision Transformer model
@@ -109,7 +109,8 @@ for epoch in range(num_epochs):
 
     if val_loss < best_val_loss:
         best_val_loss = val_loss
-        torch.save(model.state_dict(), "vit_best_model.pth")
+        model_save_path = os.path.join(base_dir, '../model', f'vit_best_model.pth')
+        torch.save(model.state_dict(), model_save_path)
         print("Saved Best Model!")
 
 
