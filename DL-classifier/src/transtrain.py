@@ -8,6 +8,7 @@ from torch.cuda.amp import GradScaler, autocast
 import timm
 from tqdm import tqdm
 import os
+from sklearn.model_selection import ParameterGrid
 
 
 # hyperparameters
@@ -50,7 +51,7 @@ optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
 # mixed precision scaler
 scaler = GradScaler()
 
-def training_step(model, loader, optimizer, criterion, scaler, accumulation_steps):
+def train(model, loader, optimizer, criterion, scaler, accumulation_steps):
     model.train()
     running_loss = 0.0
     optimizer.zero_grad()
@@ -73,6 +74,7 @@ def training_step(model, loader, optimizer, criterion, scaler, accumulation_step
 
     return running_loss / len(loader)
 
+
 def validate(model, loader, criterion):
     model.eval()
     running_loss = 0.0
@@ -94,13 +96,59 @@ def validate(model, loader, criterion):
     accuracy = correct / total * 100
     return running_loss / len(loader), accuracy
 
+def hyperparameter_tuning(train_loader, val_loader, model, param_grid):
+    best_params = None
+    best_val_loss = float("inf")
+
+    for params in ParameterGrid(param_grid):
+        print(f"Testing with parameters: {params}")
+        
+        # Update model, optimizer, and other hyperparameters
+        model = timm.create_model('vit_base_patch16_224', pretrained=True, num_classes=num_classes)
+        model.to(device)
+        optimizer = optim.AdamW(model.parameters(), lr=params['learning_rate'])
+        criterion = nn.CrossEntropyLoss()
+        scaler = GradScaler()
+        
+        for epoch in range(params['num_epochs']):
+            print(f"Epoch {epoch + 1}/{params['num_epochs']}")
+
+            # training
+            train_loss = train(model, train_loader, optimizer, criterion, scaler, params['accumulation_steps'])
+            print(f"Training Loss: {train_loss:.4f}")
+
+            # validation
+            val_loss, val_accuracy = validate(model, val_loader, criterion)
+            print(f"Validation Loss: {val_loss:.4f}, Accuracy: {val_accuracy:.2f}%")
+
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_params = params
+                print(f"New Best Params: {best_params}")
+                model_save_path = os.path.join(base_dir, '../model', f'vit_best_model.pth')
+                torch.save(model.state_dict(), model_save_path)
+                print("Saved Best Model!")
+
+    return best_params
+
+# Define hyperparameter grid
+param_grid = {
+    'learning_rate': [0.0001, 0.0005, 0.001],
+    'num_epochs': [10, 20],
+    'accumulation_steps': [2, 4]
+}
+
+# Perform hyperparameter tuning
+best_params = hyperparameter_tuning(train_loader, val_loader, model, param_grid)
+print(f"Best hyperparameters: {best_params}")
+
 
 best_val_loss = float("inf")
 for epoch in range(num_epochs):
     print(f"Epoch {epoch + 1}/{num_epochs}")
 
     # training
-    train_loss = training_step(model, train_loader, optimizer, criterion, scaler, accumulation_steps)
+    train_loss = train(model, train_loader, optimizer, criterion, scaler, accumulation_steps)
     print(f"Training Loss: {train_loss:.4f}")
 
     # validation
