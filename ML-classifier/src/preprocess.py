@@ -8,6 +8,7 @@ import numpy as np
 from skimage.feature import hog
 from skimage import exposure
 from imblearn.over_sampling import SMOTE
+from skimage.color import rgb2hsv, hsv2rgb
 
 # PSPI 0 = no pain, 1 = trace, 2 = weak, >=3 = strong
 # just doing no pain and pain so 0 = no pain, >=1 = pain
@@ -175,68 +176,79 @@ def random_augment(train_pain_dir, train_no_pain_dir):
     num_non_pain_images = len(non_pain_images)
     non_pain_images.sort()
 
-
-    #randomly flips 1/5 of the images horizontally
+    
     random.seed(42)
 
+    ###NOTE:randomly flips 1/5 of the images horizontally
     random.shuffle(pain_images)
     random.shuffle(non_pain_images)
-    for pain_image, non_pain_image in zip(pain_images[:num_pain_images//5], non_pain_images[:num_non_pain_images//5]):
+    for pain_image in tqdm(pain_images[:num_pain_images//5], desc="Flipping pain images"):
         # print("Flipping", os.path.join(train_pain_dir, pain_image))
         flipped_image = Image.open(os.path.join(train_pain_dir, pain_image)).transpose(Image.FLIP_LEFT_RIGHT)
         flipped_image.save(os.path.join(train_pain_dir, pain_image))   #save back to the same file
+
+    for non_pain_image in tqdm(non_pain_images[:num_non_pain_images//5], desc="Flipping non pain images"):
         flipped_image = Image.open(os.path.join(train_no_pain_dir, non_pain_image)).transpose(Image.FLIP_LEFT_RIGHT)
         flipped_image.save(os.path.join(train_no_pain_dir, non_pain_image))
 
-    #randomly rotates 1/5 of the images by 90, 180, 270 degrees (random choice of angle)
+    ###NOTE:randomly rotates 1/5 of the images by (-20, 20) degrees
     random.shuffle(pain_images)
     random.shuffle(non_pain_images)
-    angle = [90, 180, 270]
-    for pain_image, non_pain_image in zip(pain_images[:num_pain_images//5], non_pain_images[:num_non_pain_images//5]):
+    for pain_image in tqdm(pain_images[:num_pain_images//5], desc="Rotating pain images"):
         # print("Rotating", os.path.join(train_pain_dir, pain_image))
-        rotated_image = Image.open(os.path.join(train_pain_dir, pain_image)).rotate(random.choice(angle))
+        rotated_image = Image.open(os.path.join(train_pain_dir, pain_image)).rotate(random.randint(-20,20))
         rotated_image.save(os.path.join(train_pain_dir, pain_image))
-        rotated_image = Image.open(os.path.join(train_no_pain_dir, non_pain_image)).rotate(random.choice(angle))
+
+    for non_pain_image in tqdm(non_pain_images[:num_non_pain_images//5], desc="Rotating non pain images"):
+        rotated_image = Image.open(os.path.join(train_no_pain_dir, non_pain_image)).rotate(random.randint(-20,20))
         rotated_image.save(os.path.join(train_no_pain_dir, non_pain_image))
     
-    #randomly crops 1/5 of the images (random choice of margin between 0 and 0.2 percentage of the image size from each side)
+    ###NOTE:randomly crops 1/5 of the images on the longer side to a square
     random.shuffle(pain_images)
     random.shuffle(non_pain_images)
-    for pain_image, non_pain_image in zip(pain_images[:num_pain_images//5], non_pain_images[:num_non_pain_images//5]):
+    for pain_image in tqdm(pain_images[:num_pain_images//5], desc="Cropping pain images"):
         # print("Cropping", os.path.join(train_pain_dir, pain_image))
         pain_image_obj = Image.open(os.path.join(train_pain_dir, pain_image))
-        margins = [random.uniform(0, 0.1), random.uniform(0, 0.1), random.uniform(0.9, 1), random.uniform(0.9, 1)]   #for left, top, right, bottom
-        coordinates =[margins[0]*pain_image_obj.size[0], margins[1]*pain_image_obj.size[1], margins[2]*pain_image_obj.size[0], margins[3]*pain_image_obj.size[1]]
-        cropped_image = pain_image_obj.crop(coordinates)
-        cropped_image.save(os.path.join(train_pain_dir, pain_image))
+        length = min(pain_image_obj.size)
+        left = random.randint(0, (pain_image_obj.size[0] - length)/2)
+        top = 0
+        right = left + length
+        bottom = length
+        pain_image_obj = pain_image_obj.crop((left, top, right, bottom))
+        pain_image_obj.save(os.path.join(train_pain_dir, pain_image))
 
+    for non_pain_image in tqdm(non_pain_images[:num_non_pain_images//5], desc="Cropping non pain images"):
         non_pain_image_obj = Image.open(os.path.join(train_no_pain_dir, non_pain_image))
-        margins = [random.uniform(0, 0.1), random.uniform(0, 0.1), random.uniform(0.9, 1), random.uniform(0.9, 1)]   #for left, top, right, bottom
-        coordinates = [margins[0]*non_pain_image_obj.size[0], margins[1]*non_pain_image_obj.size[1], margins[2]*non_pain_image_obj.size[0], margins[3]*non_pain_image_obj.size[1]]
-        cropped_image = non_pain_image_obj.crop(coordinates)
-        cropped_image.save(os.path.join(train_no_pain_dir, non_pain_image))
+        length = min(non_pain_image_obj.size)
+        left = random.randint(0, (non_pain_image_obj.size[0] - length)/2)
+        top = 0
+        right = left + length
+        bottom = length
+        non_pain_image_obj = non_pain_image_obj.crop((left, top, right, bottom))
+        non_pain_image_obj.save(os.path.join(train_no_pain_dir, non_pain_image))
+
     
     random.shuffle(pain_images)
     random.shuffle(non_pain_images)
-    #changes histogram equalisation for 1/5 of the images
-    for pain_image, non_pain_image in zip(pain_images[:num_pain_images//5], non_pain_images[:num_non_pain_images//5]):
+    ###NOTE:changes histogram equalisation for 1/5 of the images, only on the value channel
+    for pain_image in tqdm(pain_images[:num_pain_images//5], desc="Histogram equalisation pain images"):
         # print("Histogram equalisation", os.path.join(train_pain_dir, pain_image))
         image = Image.open(os.path.join(train_pain_dir, pain_image))
-        image = image.convert('L')
         image = np.array(image)
-        #image is coloured so perform histogram equalisation on each channel
-        image = exposure.equalize_hist(image)
+        image = rgb2hsv(image)
+        image[:,:,2] = exposure.equalize_hist(image[:,:,2])     #equalise the value channel
+        image = hsv2rgb(image)
         image = Image.fromarray((image*255).astype(np.uint8))    #scales back to 0-255 and convert to image
         image.save(os.path.join(train_pain_dir, pain_image))
-        
+    
+    for non_pain_image in tqdm(non_pain_images[:num_non_pain_images//5], desc="Histogram equalisation non pain images"):
         image = Image.open(os.path.join(train_no_pain_dir, non_pain_image))
-        #image is coloured so perform histogram equalisation on each channel
-        image = image.convert('L')
         image = np.array(image)
-        image = exposure.equalize_hist(image)
+        image = rgb2hsv(image)
+        image[:,:,2] = exposure.equalize_hist(image[:,:,2])     #equalise the value channel
+        image = hsv2rgb(image)
         image = Image.fromarray((image*255).astype(np.uint8))
         image.save(os.path.join(train_no_pain_dir, non_pain_image))
-
 
 
 
