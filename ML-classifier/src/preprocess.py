@@ -4,6 +4,10 @@ import shutil
 import random
 from tqdm import tqdm
 from PIL import Image
+import numpy as np
+from skimage.feature import hog
+from skimage import exposure
+from imblearn.over_sampling import SMOTE
 
 # PSPI 0 = no pain, 1 = trace, 2 = weak, >=3 = strong
 # just doing no pain and pain so 0 = no pain, >=1 = pain
@@ -39,25 +43,6 @@ def label_images(label_dir, dataset_dir):
     print("Labels complete!\n")
     return labels
 
-def stratified_split_by_person(image_dir, label_dir, dataset_dir, project_dir, train_dir, val_dir, test_dir):
-    labels = label_images(label_dir, dataset_dir)
-    image_paths = glob.glob(os.path.join(dataset_dir, image_dir, '*/*/*.png'))
-
-    for image_path in tqdm(image_paths, desc="Sorting images"):
-        filename = os.path.basename(image_path)
-        label = labels.get(filename)
-        if label:     #pain
-            dest_dir = os.path.join(project_dir, 'sorted-images', 'pain')
-        else:
-            dest_dir = os.path.join(project_dir, 'sorted-images', 'no-pain')
-        os.makedirs(dest_dir, exist_ok=True)
-        dest_path = os.path.join(dest_dir, filename)
-        if not os.path.exists(dest_path):
-            shutil.copy(image_path, dest_path)
-    
-    print("Sort complete!\n")
-
-
 
 # sort images into pain and no pain folders and then into train and test folders
 def sort_images(image_dir, label_dir, project_dir, dataset_dir):
@@ -80,9 +65,10 @@ def sort_images(image_dir, label_dir, project_dir, dataset_dir):
 
 def split_by_person(image_dir):
     person_images = {}
-    image_list = os.listdir(image_dir)
+    image_list = os.listdir(image_dir)    #this has not guaranteed order
+    image_list.sort()
     for image in tqdm(image_list, desc="Processing images by person"):
-        person_id = image.split('t')[0]  # assuming person id is before 't' in filename
+        person_id = image[:5]  # assuming person id is the first 5 characters of the filename
         if person_id not in person_images:
             person_images[person_id] = []
         person_images[person_id].append(image)
@@ -90,7 +76,7 @@ def split_by_person(image_dir):
     train_images = []
     val_images = []
     test_images = []
-    random.seed = 42
+    random.seed(42)
     for person_id, images in person_images.items():
         random.shuffle(images)
         train_split_idx = int(0.6 * len(images))
@@ -113,6 +99,15 @@ def split_images(project_dir, train_dir, val_dir, test_dir):
     test_pain_dir = os.path.join(project_dir, test_dir, 'pain')
     test_no_pain_dir = os.path.join(project_dir, test_dir, 'no-pain')
     
+    
+    os.makedirs(train_pain_dir, exist_ok=True)
+    os.makedirs(train_no_pain_dir, exist_ok=True)
+    os.makedirs(val_pain_dir, exist_ok=True)
+    os.makedirs(val_no_pain_dir, exist_ok=True)
+    os.makedirs(test_pain_dir, exist_ok=True)
+    os.makedirs(test_no_pain_dir, exist_ok=True)
+
+
     os.makedirs(train_pain_dir, exist_ok=True)
     os.makedirs(train_no_pain_dir, exist_ok=True)
     os.makedirs(val_pain_dir, exist_ok=True)
@@ -122,26 +117,29 @@ def split_images(project_dir, train_dir, val_dir, test_dir):
 
     # ensure the directories are empty
     for dir_path in [train_pain_dir, train_no_pain_dir, val_pain_dir, val_no_pain_dir, test_pain_dir, test_no_pain_dir]:
-        for file in os.listdir(dir_path):
-            file_path = os.path.join(dir_path, file)
-            if os.path.isfile(file_path):
-                os.remove(file_path)
+        #recursively delete all files in the directory
+        if (os.path.exists(dir_path)):
+            shutil.rmtree(dir_path)
+        #recreate the directory
+        os.makedirs(dir_path, exist_ok=True)
 
     train_pain_images, val_pain_images, test_pain_images = split_by_person(pain_dir)
     train_no_pain_images, val_no_pain_images, test_no_pain_images = split_by_person(no_pain_dir)
 
     # duplicate training data for data augmentation, will be flipped horizontally - also using a different 
     # metric for evaluation as the dataset is heavily skewed towards no pain
+    ###TODO: edit something here to oversample the data
     for image in tqdm(train_pain_images, desc="Copying train pain images"):
         #not flipped
-        name = f"{image.split('.')[0]}_{0}.png"
-        shutil.copy(os.path.join(pain_dir, image), os.path.join(train_pain_dir, name))
+        
+        for i in range(5):        #duplicate 5 times
+            name = f"{image.split('.')[0]}_{i}.png"
+            shutil.copy(os.path.join(pain_dir, image), os.path.join(train_pain_dir, name))
 
-        #flipped the duplicate
-        flipped_image = Image.open(os.path.join(pain_dir, image)).transpose(Image.FLIP_LEFT_RIGHT)
-        name = f"{image.split('.')[0]}_{1}.png"
-        flipped_image.save(os.path.join(train_pain_dir, name))
-
+        # #flipped the duplicate
+        # flipped_image = Image.open(os.path.join(pain_dir, image)).transpose(Image.FLIP_LEFT_RIGHT)
+        # name = f"{image.split('.')[0]}_{1}.png"
+        # flipped_image.save(os.path.join(train_pain_dir, name))
     for image in tqdm(val_pain_images, desc="Copying val pain images"):
         shutil.copy(os.path.join(pain_dir, image), os.path.join(val_pain_dir, image))
     for image in tqdm(test_pain_images, desc="Copying test pain images"):
@@ -152,19 +150,108 @@ def split_images(project_dir, train_dir, val_dir, test_dir):
         shutil.copy(os.path.join(no_pain_dir, image), os.path.join(val_no_pain_dir, image))
     for image in tqdm(test_no_pain_images, desc="Copying test no pain images"):
         shutil.copy(os.path.join(no_pain_dir, image), os.path.join(test_no_pain_dir, image))
-    
+
+
     print("Split complete!\n")
+
+
+#After duplicating the data x5, there is too much pain data now (25060) so we need to randomly remove some to get 24008
+def random_undersample(train_pain_dir, train_no_pain_dir):
+    pain_images = os.listdir(train_pain_dir)
+    pain_images.sort()
+    random.seed(42)
+    random.shuffle(pain_images)
+    diff = len(os.listdir(train_pain_dir)) - len(os.listdir(train_no_pain_dir))
+    undersampled_pain_images = pain_images[:diff]
+    for image in undersampled_pain_images:
+        os.remove(os.path.join(train_pain_dir, image))
+
+def random_augment(train_pain_dir, train_no_pain_dir):
+    
+    pain_images = os.listdir(train_pain_dir)
+    num_pain_images = len(pain_images)
+    pain_images.sort()
+    non_pain_images = os.listdir(train_no_pain_dir)
+    num_non_pain_images = len(non_pain_images)
+    non_pain_images.sort()
+
+
+    #randomly flips 1/5 of the images horizontally
+    random.seed(42)
+
+    random.shuffle(pain_images)
+    random.shuffle(non_pain_images)
+    for pain_image, non_pain_image in zip(pain_images[:num_pain_images//5], non_pain_images[:num_non_pain_images//5]):
+        # print("Flipping", os.path.join(train_pain_dir, pain_image))
+        flipped_image = Image.open(os.path.join(train_pain_dir, pain_image)).transpose(Image.FLIP_LEFT_RIGHT)
+        flipped_image.save(os.path.join(train_pain_dir, pain_image))   #save back to the same file
+        flipped_image = Image.open(os.path.join(train_no_pain_dir, non_pain_image)).transpose(Image.FLIP_LEFT_RIGHT)
+        flipped_image.save(os.path.join(train_no_pain_dir, non_pain_image))
+
+    #randomly rotates 1/5 of the images by 90, 180, 270 degrees (random choice of angle)
+    random.shuffle(pain_images)
+    random.shuffle(non_pain_images)
+    angle = [90, 180, 270]
+    for pain_image, non_pain_image in zip(pain_images[:num_pain_images//5], non_pain_images[:num_non_pain_images//5]):
+        # print("Rotating", os.path.join(train_pain_dir, pain_image))
+        rotated_image = Image.open(os.path.join(train_pain_dir, pain_image)).rotate(random.choice(angle))
+        rotated_image.save(os.path.join(train_pain_dir, pain_image))
+        rotated_image = Image.open(os.path.join(train_no_pain_dir, non_pain_image)).rotate(random.choice(angle))
+        rotated_image.save(os.path.join(train_no_pain_dir, non_pain_image))
+    
+    #randomly crops 1/5 of the images (random choice of margin between 0 and 0.2 percentage of the image size from each side)
+    random.shuffle(pain_images)
+    random.shuffle(non_pain_images)
+    for pain_image, non_pain_image in zip(pain_images[:num_pain_images//5], non_pain_images[:num_non_pain_images//5]):
+        # print("Cropping", os.path.join(train_pain_dir, pain_image))
+        pain_image_obj = Image.open(os.path.join(train_pain_dir, pain_image))
+        margins = [random.uniform(0, 0.1), random.uniform(0, 0.1), random.uniform(0.9, 1), random.uniform(0.9, 1)]   #for left, top, right, bottom
+        coordinates =[margins[0]*pain_image_obj.size[0], margins[1]*pain_image_obj.size[1], margins[2]*pain_image_obj.size[0], margins[3]*pain_image_obj.size[1]]
+        cropped_image = pain_image_obj.crop(coordinates)
+        cropped_image.save(os.path.join(train_pain_dir, pain_image))
+
+        non_pain_image_obj = Image.open(os.path.join(train_no_pain_dir, non_pain_image))
+        margins = [random.uniform(0, 0.1), random.uniform(0, 0.1), random.uniform(0.9, 1), random.uniform(0.9, 1)]   #for left, top, right, bottom
+        coordinates = [margins[0]*non_pain_image_obj.size[0], margins[1]*non_pain_image_obj.size[1], margins[2]*non_pain_image_obj.size[0], margins[3]*non_pain_image_obj.size[1]]
+        cropped_image = non_pain_image_obj.crop(coordinates)
+        cropped_image.save(os.path.join(train_no_pain_dir, non_pain_image))
+    
+    random.shuffle(pain_images)
+    random.shuffle(non_pain_images)
+    #changes histogram equalisation for 1/5 of the images
+    for pain_image, non_pain_image in zip(pain_images[:num_pain_images//5], non_pain_images[:num_non_pain_images//5]):
+        # print("Histogram equalisation", os.path.join(train_pain_dir, pain_image))
+        image = Image.open(os.path.join(train_pain_dir, pain_image))
+        image = image.convert('L')
+        image = np.array(image)
+        #image is coloured so perform histogram equalisation on each channel
+        image = exposure.equalize_hist(image)
+        image = Image.fromarray((image*255).astype(np.uint8))    #scales back to 0-255 and convert to image
+        image.save(os.path.join(train_pain_dir, pain_image))
+        
+        image = Image.open(os.path.join(train_no_pain_dir, non_pain_image))
+        #image is coloured so perform histogram equalisation on each channel
+        image = image.convert('L')
+        image = np.array(image)
+        image = exposure.equalize_hist(image)
+        image = Image.fromarray((image*255).astype(np.uint8))
+        image.save(os.path.join(train_no_pain_dir, non_pain_image))
+
+
+
 
 
 
 def main():
-    dataset_dir = r'/Users/yutingshang/Documents/AAI-Mini-Project' # change this to the path of the dataset
-    project_dir = r'/Users/yutingshang/Documents/AAI-Mini-Project/ML-classifier' # change this to the path of the project
+    dataset_dir = r'/Users/yutingshang/Documents/Projects/AAI-Mini-Project/UNBC_dataset' # change this to the path of the dataset
+    project_dir = r'/Users/yutingshang/Documents/Projects/AAI-Mini-Project/ML-classifier' # change this to the path of the project
     image_dir = 'UNBC_dataset/Images'
     label_dir = 'UNBC_dataset/Frame_Labels/PSPI'
     train_dir = 'data/train'
     val_dir = 'data/val'
     test_dir = 'data/test'
+    train_pain_dir = os.path.join(project_dir, train_dir, 'pain')
+    train_no_pain_dir = os.path.join(project_dir, train_dir, 'no-pain')
 
     # Example usage of label_images
     # labels = label_images(label_dir, dataset_dir)
@@ -174,11 +261,16 @@ def main():
     # uncomment to run sort_images
     #sort_images(image_dir, label_dir, project_dir, dataset_dir)
 
+    ###NOTE: need to run this again if you have augmented the data!!!
     # uncomment to run split_images
     split_images(project_dir, train_dir, val_dir, test_dir)
 
-    train_pain_dir = os.path.join(project_dir, train_dir, 'pain')
-    train_no_pain_dir = os.path.join(project_dir, train_dir, 'no-pain')
+    # uncomment to run data augmentation
+    random_undersample(train_pain_dir, train_no_pain_dir)   #randomly remove to balance the dataset to both be 24008
+    random_augment(train_pain_dir, train_no_pain_dir)   #randomly augment the data
+
+
+    #uncomment to check number of images
     num_train_pain = len(os.listdir(train_pain_dir))
     num_train_no_pain = len(os.listdir(train_no_pain_dir))
     print(f"Number of training pain images: {num_train_pain}")
