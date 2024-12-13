@@ -250,6 +250,62 @@ def random_augment(train_pain_dir, train_no_pain_dir):
         image = Image.fromarray((image*255).astype(np.uint8))
         image.save(os.path.join(train_no_pain_dir, non_pain_image))
 
+def generate_smote(train_pain_dir):
+    
+    pain_images = os.listdir(train_pain_dir)
+
+    pain_numpy_arrays = []
+    for image in tqdm(pain_images[:101], desc="Converting 100 pain images"):
+        image = Image.open(os.path.join(train_pain_dir, image))
+        image = image.resize((224, 224))
+        image_array = np.array(image)
+        pain_numpy_arrays.append(image_array)  
+
+    #dimension of pain_numpy_arrays should be 100x224x224x3
+    pain_numpy_arrays = np.array(pain_numpy_arrays)   #convert to numpy array
+    print(pain_numpy_arrays.shape)
+
+    #apply smote
+    pain_numpy_arrays = pain_numpy_arrays.reshape(101, -1)     #infer reshape to (100, 224*224*3) i.e. flattens each image
+    
+    desired_pain_images = 500  #desired number of pain images - which are labelled as 1
+
+    sm = SMOTE(random_state=42, k_neighbors=40, sampling_strategy={1: desired_pain_images})     #creates 400 new samples
+    smote_pain_images = sm.fit_resample(pain_numpy_arrays, np.concatenate((np.ones(len(pain_numpy_arrays)-1), np.zeros(1))))     #add 1 to the last sample to make it a "non-pain" sample
+    #get only the synthetic new samples
+    smote_pain_images = smote_pain_images[0]     #get the images, not the labels
+    print(smote_pain_images.shape)
+    print(pain_numpy_arrays.shape)
+
+    # mask = np.isin(pain_numpy_arrays, smote_pain_images)
+    # synthetic_pain_images = smote_pain_images[~mask]     #get the synthetic new samples
+
+    mask = (smote_pain_images[:, None] == pain_numpy_arrays).all(-1).any(-1)
+    synthetic_pain_images = smote_pain_images[~mask]
+    print(synthetic_pain_images.shape)
+
+    synthetic_pain_images = synthetic_pain_images.reshape(400, 224, 224, 3)   #reshape to 400x224x224x3
+    i=0
+    for image in tqdm(synthetic_pain_images, desc="Saving synthetic pain images"):
+        image = Image.fromarray(image)
+        image.save(os.path.join(train_pain_dir, f"synthetic_{i}.png"))
+        i+=1
+
+def very_easy_smote():
+    X_data = np.array([[1,2,3], [50,40,60], [2,1,2], [6,3,1], [1,1,1], [1,3,3], [1,2,3], [2,2,1]])
+    y_data = np.array([1, 0, 1, 1, 1, 1, 1, 1])
+    smote = SMOTE(random_state=42, sampling_strategy={1: 10})
+    X_data_res, y_data_res = smote.fit_resample(X_data, y_data)
+    print(X_data_res.shape)
+    print("X_data_res", X_data_res)
+    print("X_data", X_data)
+    mask = (X_data_res[:, None] == X_data).all(-1).any(-1)
+    synthetic = X_data_res[~mask]
+    print("Synthetic", synthetic)
+
+
+
+
 
 
 
@@ -275,12 +331,15 @@ def main():
 
     ###NOTE: need to run this again if you have augmented the data!!!
     # uncomment to run split_images
-    split_images(project_dir, train_dir, val_dir, test_dir)
+    # split_images(project_dir, train_dir, val_dir, test_dir)
 
     # uncomment to run data augmentation
-    random_undersample(train_pain_dir, train_no_pain_dir)   #randomly remove to balance the dataset to both be 24008
-    random_augment(train_pain_dir, train_no_pain_dir)   #randomly augment the data
+    # random_undersample(train_pain_dir, train_no_pain_dir)   #randomly remove to balance the dataset to both be 24008
+    # random_augment(train_pain_dir, train_no_pain_dir)   #randomly augment the data
 
+    # uncomment to run smote
+    generate_smote(train_pain_dir)
+    # very_easy_smote()
 
     #uncomment to check number of images
     num_train_pain = len(os.listdir(train_pain_dir))
