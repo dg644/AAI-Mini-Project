@@ -64,15 +64,19 @@ def sort_images(image_dir, label_dir, project_dir, dataset_dir):
     
     print("Sort complete!\n")
 
-def split_by_person(image_dir):
-    person_images = {}
-    image_list = os.listdir(image_dir)    #this has not guaranteed order
+def split_by_person(directory):
+    person_images = {}     #a dictionary person_id: [list of images]
+    image_list = os.listdir(directory)    #this has not guaranteed order
     image_list.sort()
     for image in tqdm(image_list, desc="Processing images by person"):
         person_id = image[:5]  # assuming person id is the first 5 characters of the filename
         if person_id not in person_images:
             person_images[person_id] = []
         person_images[person_id].append(image)
+    return person_images
+
+def train_val_test_by_person(image_dir):
+    person_images = split_by_person(image_dir)
     
     train_images = []
     val_images = []
@@ -124,18 +128,18 @@ def split_images(project_dir, train_dir, val_dir, test_dir):
         #recreate the directory
         os.makedirs(dir_path, exist_ok=True)
 
-    train_pain_images, val_pain_images, test_pain_images = split_by_person(pain_dir)
-    train_no_pain_images, val_no_pain_images, test_no_pain_images = split_by_person(no_pain_dir)
+    train_pain_images, val_pain_images, test_pain_images = train_val_test_by_person(pain_dir)
+    train_no_pain_images, val_no_pain_images, test_no_pain_images = train_val_test_by_person(no_pain_dir)
 
     # duplicate training data for data augmentation, will be flipped horizontally - also using a different 
     # metric for evaluation as the dataset is heavily skewed towards no pain
     ###TODO: edit something here to oversample the data
     for image in tqdm(train_pain_images, desc="Copying train pain images"):
         #not flipped
-        
-        for i in range(5):        #duplicate 5 times
-            name = f"{image.split('.')[0]}_{i}.png"
-            shutil.copy(os.path.join(pain_dir, image), os.path.join(train_pain_dir, name))
+        shutil.copy(os.path.join(pain_dir, image), os.path.join(train_pain_dir, image))
+        # for i in range(5):        #duplicate 5 times
+        #     name = f"{image.split('.')[0]}_{i}.png"
+        #     shutil.copy(os.path.join(pain_dir, image), os.path.join(train_pain_dir, name))
 
         # #flipped the duplicate
         # flipped_image = Image.open(os.path.join(pain_dir, image)).transpose(Image.FLIP_LEFT_RIGHT)
@@ -156,16 +160,17 @@ def split_images(project_dir, train_dir, val_dir, test_dir):
     print("Split complete!\n")
 
 
-#After duplicating the data x5, there is too much pain data now (25060) so we need to randomly remove some to get 24008
-def random_undersample(train_pain_dir, train_no_pain_dir):
+#After duplicating the data x4.75, there is still not enough pain data, so we need to randomly duplicate some pain images to get 24008
+def random_oversample(train_pain_dir, train_no_pain_dir):
     pain_images = os.listdir(train_pain_dir)
     pain_images.sort()
     random.seed(42)
     random.shuffle(pain_images)
-    diff = len(os.listdir(train_pain_dir)) - len(os.listdir(train_no_pain_dir))
-    undersampled_pain_images = pain_images[:diff]
-    for image in undersampled_pain_images:
-        os.remove(os.path.join(train_pain_dir, image))
+    diff = len(os.listdir(train_no_pain_dir)) - len(os.listdir(train_pain_dir))     #number of images to duplicate
+    images_to_duplicate = pain_images[:diff]
+    for image in images_to_duplicate:
+        new_image_name = f"{image.split('.')[0]}_{"dup"}.png"
+        shutil.copy(os.path.join(train_pain_dir, image), os.path.join(train_pain_dir, new_image_name))
 
 def random_augment(train_pain_dir, train_no_pain_dir):
     
@@ -250,60 +255,90 @@ def random_augment(train_pain_dir, train_no_pain_dir):
         image = Image.fromarray((image*255).astype(np.uint8))
         image.save(os.path.join(train_no_pain_dir, non_pain_image))
 
-def generate_smote(train_pain_dir):
-    
-    pain_images = os.listdir(train_pain_dir)
+def generate_smote(train_pain_dir, synthetic_train_pain_dir):
+    if os.path.exists(synthetic_train_pain_dir):
+        shutil.rmtree(synthetic_train_pain_dir)
+    os.makedirs(synthetic_train_pain_dir, exist_ok=True)
 
-    pain_numpy_arrays = []
-    for image in tqdm(pain_images[:101], desc="Converting 100 pain images"):
-        image = Image.open(os.path.join(train_pain_dir, image))
-        image = image.resize((224, 224))
-        image_array = np.array(image)
-        pain_numpy_arrays.append(image_array)  
+    #first split the pain images by person, since we will perform SMOTE on each person separately
+    people_pain_images = split_by_person(train_pain_dir)
+  
+    #batch the pain images for each person if it exceeds the batch size, otherwise SMOTE runs out of memory
+    batch_size = 200  
+    batched_people_pain_images = {}
+    for person_id in people_pain_images:
+        if len(people_pain_images[person_id]) > batch_size:
+            #batch up the images to 300
+            for i in range(0, len(people_pain_images[person_id]), batch_size):
+                batch = people_pain_images[person_id][i:i+batch_size]
+                batched_people_pain_images[person_id+f"_{i//batch_size}"] = batch     #e.g. ak064_0, ak064_1, ak064_2, ...
+        else:
+            batched_people_pain_images[person_id] = people_pain_images[person_id]
 
-    #dimension of pain_numpy_arrays should be 100x224x224x3
-    pain_numpy_arrays = np.array(pain_numpy_arrays)   #convert to numpy array
-    print(pain_numpy_arrays.shape)
+    #for each person, perform SMOTE
+    for person_id, pain_images in batched_people_pain_images.items():
+       
+        pain_numpy_arrays = []
+        num_pain_images = len(pain_images)
+        desired_pain_images = num_pain_images*4.75  #desired number of pain images - which are labelled as 1
 
-    #apply smote
-    pain_numpy_arrays = pain_numpy_arrays.reshape(101, -1)     #infer reshape to (100, 224*224*3) i.e. flattens each image
-    
-    desired_pain_images = 500  #desired number of pain images - which are labelled as 1
+        #convert the images to arrays of pixels
+        for image in tqdm(pain_images, desc=f"Converting pain images for {person_id}"):
+            image = Image.open(os.path.join(train_pain_dir, image))
+            image = image.resize((224, 224))       #resize to 224x224
+            image_array = np.array(image)
+            pain_numpy_arrays.append(image_array)  
+        
+        pain_numpy_arrays = np.array(pain_numpy_arrays)   #convert to numpy array
+        print("pain_numpy_arrays shape:", pain_numpy_arrays.shape)     #SANITY CHECK: dimension of pain_numpy_arrays should be {num_pain_images}x224x224x3
 
-    sm = SMOTE(random_state=42, k_neighbors=40, sampling_strategy={1: desired_pain_images})     #creates 400 new samples
-    smote_pain_images = sm.fit_resample(pain_numpy_arrays, np.concatenate((np.ones(len(pain_numpy_arrays)-1), np.zeros(1))))     #add 1 to the last sample to make it a "non-pain" sample
-    #get only the synthetic new samples
-    smote_pain_images = smote_pain_images[0]     #get the images, not the labels
-    print(smote_pain_images.shape)
-    print(pain_numpy_arrays.shape)
+        #infer reshape to ({num_pain_images}, 224*224*3) i.e. flattens each image
+        pain_numpy_arrays = pain_numpy_arrays.reshape(num_pain_images, -1)     
+        print("pain_numpy_arrays shape after reshape:", pain_numpy_arrays.shape)
 
-    # mask = np.isin(pain_numpy_arrays, smote_pain_images)
-    # synthetic_pain_images = smote_pain_images[~mask]     #get the synthetic new samples
+        #add a fake majority class sample to the end of the array - just black pixels
+        pain_numpy_arrays = np.vstack((pain_numpy_arrays, np.zeros(224*224*3)))  
+        labels = np.concatenate((np.ones(len(pain_numpy_arrays)-1), np.zeros(1)))   #add a 0 to the end of the labels for the "non-pain" sample
 
-    mask = (smote_pain_images[:, None] == pain_numpy_arrays).all(-1).any(-1)
-    synthetic_pain_images = smote_pain_images[~mask]
-    print(synthetic_pain_images.shape)
+        #normalise the pixels to 0-1
+        pain_numpy_arrays = np.clip(pain_numpy_arrays/255.0, 0, 1)
 
-    synthetic_pain_images = synthetic_pain_images.reshape(400, 224, 224, 3)   #reshape to 400x224x224x3
-    i=0
-    for image in tqdm(synthetic_pain_images, desc="Saving synthetic pain images"):
-        image = Image.fromarray(image)
-        image.save(os.path.join(train_pain_dir, f"synthetic_{i}.png"))
-        i+=1
+        #apply smote
+        #creates {desired_pain_images} total samples for the pain class (labelled as 1)
+        sm = SMOTE(random_state=42, k_neighbors = 10, sampling_strategy={1: desired_pain_images})     
+        smote_pain_images = sm.fit_resample(pain_numpy_arrays, labels)  
+        pain_labels = smote_pain_images[1]
+        smote_pain_images = smote_pain_images[0][pain_labels==1]     #get the pain images labelled as 1, remove the one "non-pain" sample
 
-def very_easy_smote():
-    X_data = np.array([[1,2,3], [50,40,60], [2,1,2], [6,3,1], [1,1,1], [1,3,3], [1,2,3], [2,2,1]])
-    y_data = np.array([1, 0, 1, 1, 1, 1, 1, 1])
-    smote = SMOTE(random_state=42, sampling_strategy={1: 10})
-    X_data_res, y_data_res = smote.fit_resample(X_data, y_data)
-    print(X_data_res.shape)
-    print("X_data_res", X_data_res)
-    print("X_data", X_data)
-    mask = (X_data_res[:, None] == X_data).all(-1).any(-1)
-    synthetic = X_data_res[~mask]
-    print("Synthetic", synthetic)
+        #check if the images generated by smote are in the original pain_numpy_arrays images
+        mask = (smote_pain_images[:, None] == pain_numpy_arrays).all(-1).any(-1)   
+        #get only the synthetic images that are not in the original pain_numpy_arrays
+        synthetic_pain_images = smote_pain_images[~mask]      
+        print("Actual number of synthetic pain images (non-duplicates):", len(synthetic_pain_images))
 
+        ###NOTE: if I want to only save the synthetic images - use 'synthetic_pain_images' instead of 'smote_pain_images' in later code (i.e. remove this line of code)
+        synthetic_pain_images = smote_pain_images    # But in this case, I just want to save all the images generated by smote, including any duplicates
 
+        #convert the images back to 0-255
+        synthetic_pain_images = np.clip(synthetic_pain_images*255.0, 0, 255).astype(np.uint8)
+        synthetic_pain_images = synthetic_pain_images.reshape(len(synthetic_pain_images), 224, 224, 3)   #reshape to {desired_pain_images}x224x224x3
+        
+        i=0
+        for image in tqdm(synthetic_pain_images, desc=f"Saving {len(synthetic_pain_images)} smote pain images"):
+            image = Image.fromarray(image)
+            image.save(os.path.join(synthetic_train_pain_dir, f"{person_id}synthetic_{i}.png"))
+            i+=1
+
+def resize_non_pain_images(train_no_pain_dir, resized_train_no_pain_dir):
+    if os.path.exists(resized_train_no_pain_dir):
+        shutil.rmtree(resized_train_no_pain_dir)
+    os.makedirs(resized_train_no_pain_dir, exist_ok=True)
+
+    non_pain_images = os.listdir(train_no_pain_dir)
+    for image in tqdm(non_pain_images, desc="Resizing non pain images"):
+        image_obj = Image.open(os.path.join(train_no_pain_dir, image))
+        image_obj = image_obj.resize((224, 224))
+        image_obj.save(os.path.join(resized_train_no_pain_dir, image))
 
 
 
@@ -320,7 +355,12 @@ def main():
     test_dir = 'data/test'
     train_pain_dir = os.path.join(project_dir, train_dir, 'pain')
     train_no_pain_dir = os.path.join(project_dir, train_dir, 'no-pain')
+    synthetic_train_pain_dir = os.path.join(project_dir, train_dir, 'synthetic-pain')
+    resized_train_no_pain_dir = os.path.join(project_dir, train_dir, 'resized-no-pain')
 
+
+    # Example usage of label_images
+    # labels = label_images(label_dir, dataset_dir)
     # Example usage of label_images
     # labels = label_images(label_dir, dataset_dir)
     # print(labels['ll042t1aaaff001.png']) # 0 = no pain (PSPI = 0)
@@ -330,7 +370,7 @@ def main():
     #sort_images(image_dir, label_dir, project_dir, dataset_dir)
 
     ###NOTE: need to run this again if you have augmented the data!!!
-    # uncomment to run split_images
+    # uncomment to run split_images - it cleans the directories and then splits the images into train, val and test
     # split_images(project_dir, train_dir, val_dir, test_dir)
 
     # uncomment to run data augmentation
@@ -338,7 +378,8 @@ def main():
     # random_augment(train_pain_dir, train_no_pain_dir)   #randomly augment the data
 
     # uncomment to run smote
-    generate_smote(train_pain_dir)
+    # generate_smote(train_pain_dir, synthetic_train_pain_dir)
+    # resize_non_pain_images(train_no_pain_dir, resized_train_no_pain_dir)
     # very_easy_smote()
 
     #uncomment to check number of images
@@ -346,6 +387,10 @@ def main():
     num_train_no_pain = len(os.listdir(train_no_pain_dir))
     print(f"Number of training pain images: {num_train_pain}")
     print(f"Number of training no pain images: {num_train_no_pain}")
+    num_synthetic_train_pain = len(os.listdir(synthetic_train_pain_dir))
+    print(f"Number of synthetic training pain images: {num_synthetic_train_pain}")
+    num_resized_train_no_pain = len(os.listdir(resized_train_no_pain_dir))
+    print(f"Number of resized training no pain images: {num_resized_train_no_pain}")
 
     # check number of no-pain images is correct
     # total_no_pain = len(os.listdir(os.path.join(project_dir,test_dir,'no-pain')) ) + len(os.listdir(os.path.join(project_dir,train_dir,'no-pain'))) + len(os.listdir(os.path.join(project_dir,val_dir,'no-pain')))
