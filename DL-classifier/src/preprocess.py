@@ -347,10 +347,12 @@ def resize_non_pain_images(train_no_pain_dir, resized_train_no_pain_dir):
 
 
 def main():
-    dataset_dir = r'C:\Users\dylan\OneDrive - University of Cambridge\Part II\Affective AI\Project' # change this to the path of the dataset
-    project_dir = r'C:\Users\dylan\work\AAI-Mini-Project\DL-classifier' # change this to the path of the project
-    image_dir = 'UNBC_dataset/Images'
-    label_dir = 'UNBC_dataset/Frame_Labels/PSPI'
+    # dataset_dir = r'C:\Users\dylan\OneDrive - University of Cambridge\Part II\Affective AI\Project' # change this to the path of the dataset
+    # project_dir = r'C:\Users\dylan\work\AAI-Mini-Project\DL-classifier' # change this to the path of the project
+    dataset_dir = '/home/dg644/Downloads'
+    project_dir = '/home/dg644/aai-mini-project/DL-classifier'
+    image_dir = 'UNBC/Images'
+    label_dir = 'UNBC/Frame_Labels/PSPI'
     train_dir = 'data/train'
     train_aug_dir = 'data/train-aug'   #augmented train data
     val_dir = 'data/val'
