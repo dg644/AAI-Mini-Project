@@ -29,7 +29,7 @@ transform = transforms.Compose([
 
 # load dataset
 base_dir = os.path.dirname(os.path.abspath(__file__))
-train_dir = os.path.join(base_dir, '../data/train')
+train_dir = os.path.join(base_dir, '../data/train-aug') # change this between train and train-aug
 val_dir = os.path.join(base_dir, '../data/val')
 test_dir = os.path.join(base_dir, '../data/test')
 train_data = datasets.ImageFolder(root=train_dir, transform=transform)

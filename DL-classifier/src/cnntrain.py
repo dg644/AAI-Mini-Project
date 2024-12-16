@@ -30,7 +30,7 @@ def get_transforms():
 
 # Load datasets
 def load_data(base_dir, transform):
-    train_dir = os.path.join(base_dir, '../data/train')
+    train_dir = os.path.join(base_dir, '../data/train-aug') # change this between train and train-aug
     val_dir = os.path.join(base_dir, '../data/val')
     train_data = datasets.ImageFolder(root=train_dir, transform=transform)
     val_data = datasets.ImageFolder(root=val_dir, transform=transform)
