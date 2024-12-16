@@ -4,7 +4,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
 from torchvision.datasets import ImageFolder
 from torchvision import datasets, transforms
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 import timm
 from tqdm import tqdm
 import os
@@ -59,7 +59,7 @@ def train(model, loader, optimizer, criterion, scaler, accumulation_steps):
     for i, (images, labels) in enumerate(tqdm(loader, desc="Training")):
         images, labels = images.to(device), labels.to(device)
 
-        with autocast():
+        with autocast("cuda" if torch.cuda.is_available() else "cpu"):
             outputs = model(images)
             loss = criterion(outputs, labels) / accumulation_steps  # Normalize loss
 
@@ -133,33 +133,14 @@ def hyperparameter_tuning(train_loader, val_loader, model, param_grid):
 
 # Define hyperparameter grid
 param_grid = {
-    'learning_rate': [0.0001, 0.0005, 0.001],
-    'num_epochs': [10, 20],
+    'learning_rate': [0.0001, 0.001],
+    'num_epochs': [5],
     'accumulation_steps': [2, 4]
 }
 
 # Perform hyperparameter tuning
 best_params = hyperparameter_tuning(train_loader, val_loader, model, param_grid)
 print(f"Best hyperparameters: {best_params}")
-
-
-best_val_loss = float("inf")
-for epoch in range(num_epochs):
-    print(f"Epoch {epoch + 1}/{num_epochs}")
-
-    # training
-    train_loss = train(model, train_loader, optimizer, criterion, scaler, accumulation_steps)
-    print(f"Training Loss: {train_loss:.4f}")
-
-    # validation
-    val_loss, val_accuracy = validate(model, val_loader, criterion)
-    print(f"Validation Loss: {val_loss:.4f}, Accuracy: {val_accuracy:.2f}%")
-
-    if val_loss < best_val_loss:
-        best_val_loss = val_loss
-        model_save_path = os.path.join(base_dir, '../model', f'vit_best_model.pth')
-        torch.save(model.state_dict(), model_save_path)
-        print("Saved Best Model!")
 
 
 # print("Testing the best model...")

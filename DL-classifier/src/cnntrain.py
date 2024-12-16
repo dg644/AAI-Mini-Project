@@ -5,7 +5,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms, models
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import time
+from sklearn.model_selection import ParameterGrid
 from sklearn.metrics import f1_score, roc_auc_score
 import random
 import numpy as np
@@ -37,7 +37,7 @@ def load_data(base_dir, transform):
     return train_data, val_data
 
 # Create data loaders
-def get_data_loaders(train_data, val_data, batch_size=64):
+def get_data_loaders(train_data, val_data, batch_size=32):
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False)
     return train_loader, val_loader
@@ -51,65 +51,82 @@ def initialize_model(device):
     return vgg19
 
 # Train model
-def train_model(model, train_loader, val_loader, criterion, optimizer, device, num_epochs=5):
-    for epoch in range(num_epochs):
-        model.train()
-        running_loss = 0.0
-        progress_bar = tqdm(train_loader, desc=f"Epoch [{epoch+1}/{num_epochs}]")
-        for i, (inputs, labels) in enumerate(progress_bar):
-            inputs, labels = inputs.to(device), labels.to(device)
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
+def train(model, loader, optimizer, criterion, device, accumulation_steps):
+    model.train()
+    running_loss = 0.0
+    optimizer.zero_grad()
+
+    for i, (inputs, labels) in enumerate(tqdm(loader, desc="Training")):
+        inputs, labels = inputs.to(device), labels.to(device)
+        outputs = model(inputs)
+        loss = criterion(outputs, labels) / accumulation_steps  # Normalize loss
+        loss.backward()
+
+        if (i + 1) % accumulation_steps == 0:
             optimizer.step()
-            running_loss += loss.item()
-            progress_bar.set_postfix(loss=running_loss/len(train_loader))
-            
-            # Add a break every 100 batches to let hardware cool down
-            if i % 100 == 0 and i > 0:
-                print("\nTaking a short break to cool down...")
-                torch.cuda.empty_cache()
-                time.sleep(10)
-        
-        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {running_loss/len(train_loader)}")
-        validate_model(model, val_loader, criterion, device, epoch, num_epochs)
+            optimizer.zero_grad()
+
+        running_loss += loss.item() * accumulation_steps
+
+    return running_loss / len(loader)
 
 # Validate model
-def validate_model(model, val_loader, criterion, device, epoch, num_epochs):
-    model.eval()  # set model to evaluation mode
-    val_loss = 0.0
+def validate(model, loader, criterion, device):
+    model.eval()
+    running_loss = 0.0
     correct = 0
     total = 0
     all_labels = []
     all_preds = []
 
-    with torch.no_grad():  # disable gradient computation
-        progress_bar = tqdm(val_loader, desc="Validation")
-        for inputs, labels in progress_bar:
+    with torch.no_grad():
+        for inputs, labels in tqdm(loader, desc="Validating"):
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
             loss = criterion(outputs, labels)
-            val_loss += loss.item()
+            running_loss += loss.item()
 
             _, predicted = torch.max(outputs, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
             all_labels.extend(labels.cpu().numpy())
             all_preds.extend(predicted.cpu().numpy())
-            progress_bar.set_postfix(loss=val_loss/len(val_loader), accuracy=100 * correct / total)
 
-    val_loss /= len(val_loader)
-    accuracy = 100 * correct / total
+    accuracy = correct / total * 100
     f1 = f1_score(all_labels, all_preds, average='weighted')
     roc = roc_auc_score(all_labels, all_preds)
-    print(f'Epoch [{epoch+1}/{num_epochs}], Validation Loss: {val_loss:.4f}, Validation Accuracy: {accuracy:.2f}%')
-    print(f'Epoch [{epoch+1}/{num_epochs}], Validation F1 Score: {f1:.4f}, Validation ROC AUC: {roc:.4f}')
+    return running_loss / len(loader), accuracy, f1, roc
 
-# Save model
-def save_model(model, base_dir):
-    model_save_path = os.path.join(base_dir, '../model', f'vgg19_v2.pth')
-    torch.save(model.state_dict(), model_save_path)
+# Hyperparameter tuning
+def hyperparameter_tuning(base_dir, train_loader, val_loader, param_grid, device):
+    best_params = None
+    best_val_loss = float("inf")
+
+    for params in ParameterGrid(param_grid):
+        print(f"Testing with parameters: {params}")
+
+        model = initialize_model(device)
+        optimizer = optim.Adam(model.classifier[6].parameters(), lr=params['learning_rate'])
+        criterion = nn.CrossEntropyLoss()
+
+        for epoch in range(params['num_epochs']):
+            print(f"Epoch {epoch + 1}/{params['num_epochs']}")
+
+            train_loss = train(model, train_loader, optimizer, criterion, device, params['accumulation_steps'])
+            print(f"Training Loss: {train_loss:.4f}")
+
+            val_loss, val_accuracy, val_f1, val_roc = validate(model, val_loader, criterion, device)
+            print(f"Validation Loss: {val_loss:.4f}, Accuracy: {val_accuracy:.2f}%, F1 Score: {val_f1:.4f}, ROC AUC: {val_roc:.4f}")
+
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_params = params
+                print(f"New Best Params: {best_params}")
+                model_save_path = os.path.join(base_dir, '../model', f'vgg19_best_model.pth')
+                torch.save(model.state_dict(), model_save_path)
+                print("Saved Best Model!")
+
+    return best_params
 
 # Main function
 def main():
@@ -120,13 +137,17 @@ def main():
     train_loader, val_loader = get_data_loaders(train_data, val_data)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = initialize_model(device)
-    
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.classifier[6].parameters(), lr=0.001)
-    
-    train_model(model, train_loader, val_loader, criterion, optimizer, device)
-    save_model(model, base_dir)
+
+    # Define hyperparameter grid
+    param_grid = {
+        'learning_rate': [0.0001, 0.001],
+        'num_epochs': [5],
+        'accumulation_steps': [2, 4]
+    }
+
+    # Perform hyperparameter tuning
+    best_params = hyperparameter_tuning(base_dir, train_loader, val_loader, param_grid, device)
+    print(f"Best hyperparameters: {best_params}")
 
 if __name__ == "__main__":
     main()
