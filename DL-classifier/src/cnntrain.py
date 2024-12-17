@@ -9,6 +9,7 @@ from sklearn.model_selection import ParameterGrid
 from sklearn.metrics import f1_score, roc_auc_score
 import random
 import numpy as np
+import time
 
 # Fix random seed for reproducibility
 def set_random_seed(seed=42):
@@ -25,12 +26,11 @@ def get_transforms():
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        transforms.RandomHorizontalFlip(p=0.5),
     ])
 
 # Load datasets
 def load_data(base_dir, transform):
-    train_dir = os.path.join(base_dir, '../data/train')
+    train_dir = os.path.join(base_dir, '../data/train-aug') # change this between train and train-aug
     val_dir = os.path.join(base_dir, '../data/val')
     train_data = datasets.ImageFolder(root=train_dir, transform=transform)
     val_data = datasets.ImageFolder(root=val_dir, transform=transform)
@@ -67,6 +67,11 @@ def train(model, loader, optimizer, criterion, device, accumulation_steps):
             optimizer.zero_grad()
 
         running_loss += loss.item() * accumulation_steps
+
+        # sleep for 10 seconds to let laptop cool down
+        if (i + 1) % (200) == 0:
+            print("Sleeping for 10 seconds...")
+            time.sleep(10)
 
     return running_loss / len(loader)
 
@@ -106,7 +111,7 @@ def hyperparameter_tuning(base_dir, train_loader, val_loader, param_grid, device
         print(f"Testing with parameters: {params}")
 
         model = initialize_model(device)
-        optimizer = optim.Adam(model.classifier[6].parameters(), lr=params['learning_rate'])
+        optimizer = optim.Adam(model.classifier[6].parameters(), lr=params['learning_rate'], weight_decay=params['weight_decay'])
         criterion = nn.CrossEntropyLoss()
 
         for epoch in range(params['num_epochs']):
@@ -141,6 +146,7 @@ def main():
     # Define hyperparameter grid
     param_grid = {
         'learning_rate': [0.0001, 0.001],
+        'weight_decay': [0.01, 0.1],
         'num_epochs': [5],
         'accumulation_steps': [2, 4]
     }
@@ -148,6 +154,9 @@ def main():
     # Perform hyperparameter tuning
     best_params = hyperparameter_tuning(base_dir, train_loader, val_loader, param_grid, device)
     print(f"Best hyperparameters: {best_params}")
+
+    best_params['epochs'] = 10
+    hyperparameter_tuning(base_dir, train_loader, val_loader, best_params, device)
 
 if __name__ == "__main__":
     main()
