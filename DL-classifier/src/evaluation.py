@@ -12,14 +12,14 @@ import timm
 def load_cnn_model(device):
     vgg19 = models.vgg19(weights=models.VGG19_Weights.IMAGENET1K_V1).to(device)
     vgg19.classifier[6] = torch.nn.Linear(4096, 2)
-    vgg19.load_state_dict(torch.load(os.path.join(base_dir, '../model/vgg19_best_model.pth')))
+    vgg19.load_state_dict(torch.load(os.path.join(base_dir, '../model/vgg19_best_model.pth'), weights_only=True))
     return vgg19
 
 # Replace this with the actual loading code for your transformer model
 def load_transformer_model(device):
     num_classes = 2
     transformer_model = timm.create_model('vit_base_patch16_224', pretrained=True, num_classes=num_classes).to(device)
-    transformer_model.load_state_dict(torch.load(os.path.join(base_dir, '../model/vit_best_model.pth')))
+    transformer_model.load_state_dict(torch.load(os.path.join(base_dir, '../model/vit_best_model.pth'), weights_only=True))
     return transformer_model
 
 def evaluate_model(model, device, base_dir):
@@ -78,7 +78,7 @@ if __name__ == "__main__":
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    model_type = 'cnn'  # Change this to 'transformer' to evaluate the transformer model
+    model_type = 'transformer'  # Change this to 'transformer' to evaluate the transformer model
 
     if model_type == 'cnn':
         model = load_cnn_model(device)

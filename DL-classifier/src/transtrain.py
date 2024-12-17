@@ -2,22 +2,19 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
-from torchvision.datasets import ImageFolder
 from torchvision import datasets, transforms
 from torch.amp import GradScaler, autocast
 import timm
 from tqdm import tqdm
 import os
 from sklearn.model_selection import ParameterGrid
+import time
 
 
 # hyperparameters
 num_classes = 2  # pain or no_pain
 batch_size = 16
 image_size = 224
-learning_rate = 0.0001
-num_epochs = 20
-accumulation_steps = 4  # simulate larger batch sizes
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -46,7 +43,6 @@ model.to(device)
 
 # loss function and optimizer
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
 
 # mixed precision scaler
 scaler = GradScaler()
@@ -71,6 +67,11 @@ def train(model, loader, optimizer, criterion, scaler, accumulation_steps):
             optimizer.zero_grad()
 
         running_loss += loss.item() * accumulation_steps
+
+        # sleep for 10 seconds to let laptop cool down
+        if (i + 1) % (200) == 0:
+            print("Sleeping for 10 seconds...")
+            time.sleep(10)
 
     return running_loss / len(loader)
 
@@ -106,7 +107,7 @@ def hyperparameter_tuning(train_loader, val_loader, model, param_grid):
         # Update model, optimizer, and other hyperparameters
         model = timm.create_model('vit_base_patch16_224', pretrained=True, num_classes=num_classes)
         model.to(device)
-        optimizer = optim.AdamW(model.parameters(), lr=params['learning_rate'])
+        optimizer = optim.AdamW(model.parameters(), lr=params['learning_rate'], weight_decay=params['weight_decay'])
         criterion = nn.CrossEntropyLoss()
         scaler = GradScaler()
         
@@ -134,6 +135,7 @@ def hyperparameter_tuning(train_loader, val_loader, model, param_grid):
 # Define hyperparameter grid
 param_grid = {
     'learning_rate': [0.0001, 0.001],
+    'weight_decay': [0.01, 0.1],
     'num_epochs': [5],
     'accumulation_steps': [2, 4]
 }
@@ -142,7 +144,8 @@ param_grid = {
 best_params = hyperparameter_tuning(train_loader, val_loader, model, param_grid)
 print(f"Best hyperparameters: {best_params}")
 
-
+best_params['epochs'] = 10
+hyperparameter_tuning(train_loader, val_loader, model, best_params)
 # print("Testing the best model...")
 # model.load_state_dict(torch.load("best_model.pth"))
 # test_loss, test_accuracy = validate(model, test_loader, criterion)
