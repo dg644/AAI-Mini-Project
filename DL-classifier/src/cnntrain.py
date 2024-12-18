@@ -157,6 +157,12 @@ def main():
 
     best_params['epochs'] = 10
     hyperparameter_tuning(base_dir, train_loader, val_loader, best_params, device)
+    # Save the best hyperparameters to a text file
+    best_params_path = os.path.join(base_dir, '../model', 'best_params.txt')
+    with open(best_params_path, 'w') as f:
+        for key, value in best_params.items():
+            f.write(f"{key}: {value}\n")
+    print(f"Best hyperparameters saved to {best_params_path}")
 
 if __name__ == "__main__":
     main()
