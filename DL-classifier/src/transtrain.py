@@ -70,7 +70,6 @@ def train(model, loader, optimizer, criterion, scaler, accumulation_steps):
 
         # sleep for 10 seconds to let laptop cool down
         if (i + 1) % (200) == 0:
-            print("Sleeping for 10 seconds...")
             time.sleep(10)
 
     return running_loss / len(loader)
@@ -144,8 +143,17 @@ param_grid = {
 best_params = hyperparameter_tuning(train_loader, val_loader, model, param_grid)
 print(f"Best hyperparameters: {best_params}")
 
+best_params_path = os.path.join(base_dir, '../model', 'best_params_transformer.txt')
+with open(best_params_path, 'w') as f:
+    for key, value in best_params.items():
+        f.write(f"{key}: {value}\n")
+print(f"Best hyperparameters saved to {best_params_path}")
+
 best_params['epochs'] = 10
 hyperparameter_tuning(train_loader, val_loader, model, best_params)
+
+# Save the best hyperparameters to a text file
+
 # print("Testing the best model...")
 # model.load_state_dict(torch.load("best_model.pth"))
 # test_loss, test_accuracy = validate(model, test_loader, criterion)
