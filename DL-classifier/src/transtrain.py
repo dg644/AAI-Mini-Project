@@ -68,10 +68,6 @@ def train(model, loader, optimizer, criterion, scaler, accumulation_steps):
 
         running_loss += loss.item() * accumulation_steps
 
-        # sleep for 10 seconds to let laptop cool down
-        if (i + 1) % (200) == 0:
-            time.sleep(10)
-
     return running_loss / len(loader)
 
 
@@ -125,7 +121,7 @@ def hyperparameter_tuning(train_loader, val_loader, model, param_grid):
                 best_val_loss = val_loss
                 best_params = params
                 print(f"New Best Params: {best_params}")
-                model_save_path = os.path.join(base_dir, '../model', f'vit_best_model.pth')
+                model_save_path = os.path.join(base_dir, '../model', f'vit_best_model3.pth')
                 torch.save(model.state_dict(), model_save_path)
                 print("Saved Best Model!")
 
@@ -133,10 +129,10 @@ def hyperparameter_tuning(train_loader, val_loader, model, param_grid):
 
 # Define hyperparameter grid
 param_grid = {
-    'learning_rate': [0.0001, 0.001],
-    'weight_decay': [0.01, 0.1],
+    'learning_rate': [0.0001],
+    'weight_decay': [0.01],
     'num_epochs': [5],
-    'accumulation_steps': [2, 4]
+    'accumulation_steps': [4]
 }
 
 # Perform hyperparameter tuning
@@ -150,7 +146,7 @@ with open(best_params_path, 'w') as f:
 print(f"Best hyperparameters saved to {best_params_path}")
 
 best_params['epochs'] = 10
-hyperparameter_tuning(train_loader, val_loader, model, best_params)
+# hyperparameter_tuning(train_loader, val_loader, model, best_params)
 
 # Save the best hyperparameters to a text file
 
