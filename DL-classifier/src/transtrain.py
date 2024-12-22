@@ -117,22 +117,19 @@ def hyperparameter_tuning(train_loader, val_loader, model, param_grid):
             val_loss, val_accuracy = validate(model, val_loader, criterion)
             print(f"Validation Loss: {val_loss:.4f}, Accuracy: {val_accuracy:.2f}%")
 
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                best_params = params
-                print(f"New Best Params: {best_params}")
-                model_save_path = os.path.join(base_dir, '../model', f'vit_best_model3.pth')
-                torch.save(model.state_dict(), model_save_path)
-                print("Saved Best Model!")
+            best_params = params
+            model_save_path = os.path.join(base_dir, '../model', f'vit_bestfinal_model.pth')
+            torch.save(model.state_dict(), model_save_path)
+            print("Saved Best Model!")
 
     return best_params
 
 # Define hyperparameter grid
 param_grid = {
     'learning_rate': [0.0001],
-    'weight_decay': [0.01],
-    'num_epochs': [5],
-    'accumulation_steps': [4]
+    'weight_decay': [0.1],
+    'num_epochs': [10],
+    'accumulation_steps': [2]
 }
 
 # Perform hyperparameter tuning
@@ -144,9 +141,6 @@ with open(best_params_path, 'w') as f:
     for key, value in best_params.items():
         f.write(f"{key}: {value}\n")
 print(f"Best hyperparameters saved to {best_params_path}")
-
-best_params['epochs'] = 10
-# hyperparameter_tuning(train_loader, val_loader, model, best_params)
 
 # Save the best hyperparameters to a text file
 

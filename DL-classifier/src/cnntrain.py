@@ -44,11 +44,12 @@ def get_data_loaders(train_data, val_data, batch_size=32):
 
 # Initialize model
 def initialize_model(device):
-    vgg19 = models.vgg19(weights=models.VGG19_Weights.IMAGENET1K_V1).to(device)
-    for param in vgg19.parameters():
-        param.requires_grad = False  # freeze layers
-    vgg19.classifier[6] = nn.Linear(4096, 2).to(device)  # modify final layer for binary classification
-    return vgg19
+    resnet = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1).to(device)
+    # Unfreeze the last few layers
+    for param in list(resnet.parameters())[:-10]:
+        param.requires_grad = False
+    resnet.fc = nn.Linear(resnet.fc.in_features, 2).to(device)  # modify final layer for binary classification
+    return resnet
 
 # Train model
 def train(model, loader, optimizer, criterion, device, accumulation_steps):
@@ -67,10 +68,6 @@ def train(model, loader, optimizer, criterion, device, accumulation_steps):
             optimizer.zero_grad()
 
         running_loss += loss.item() * accumulation_steps
-
-        # sleep for 10 seconds to let laptop cool down
-        if (i + 1) % (200) == 0:
-            time.sleep(10)
 
     return running_loss / len(loader)
 
@@ -102,7 +99,7 @@ def validate(model, loader, criterion, device):
     return running_loss / len(loader), accuracy, f1, roc
 
 # Hyperparameter tuning
-def hyperparameter_tuning(base_dir, train_loader, val_loader, param_grid, device):
+def hyperparameter_tuning(base_dir, train_loader, val_loader, param_grid, device, save_path):
     best_params = None
     best_val_loss = float("inf")
 
@@ -110,7 +107,7 @@ def hyperparameter_tuning(base_dir, train_loader, val_loader, param_grid, device
         print(f"Testing with parameters: {params}")
 
         model = initialize_model(device)
-        optimizer = optim.Adam(model.classifier[6].parameters(), lr=params['learning_rate'], weight_decay=params['weight_decay'])
+        optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=params['learning_rate'], weight_decay=params['weight_decay'])
         criterion = nn.CrossEntropyLoss()
 
         for epoch in range(params['num_epochs']):
@@ -122,11 +119,15 @@ def hyperparameter_tuning(base_dir, train_loader, val_loader, param_grid, device
             val_loss, val_accuracy, val_f1, val_roc = validate(model, val_loader, criterion, device)
             print(f"Validation Loss: {val_loss:.4f}, Accuracy: {val_accuracy:.2f}%, F1 Score: {val_f1:.4f}, ROC AUC: {val_roc:.4f}")
 
+            # Append validation loss, accuracy, and parameters to a text file
+            # log_path = os.path.join(base_dir, '../model', 'cnn_training_log.txt')
+            # with open(log_path, 'a') as log_file:
+            #     log_file.write(f"Epoch: {epoch + 1}, Params: {params}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.2f}%\n")
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 best_params = params
                 print(f"New Best Params: {best_params}")
-                model_save_path = os.path.join(base_dir, '../model', f'vgg19_best_model.pth')
+                model_save_path = os.path.join(base_dir, '../model', save_path)
                 torch.save(model.state_dict(), model_save_path)
                 print("Saved Best Model!")
 
@@ -144,24 +145,22 @@ def main():
 
     # Define hyperparameter grid
     param_grid = {
-        'learning_rate': [0.0001, 0.001],
-        'weight_decay': [0.01, 0.1],
-        'num_epochs': [5],
-        'accumulation_steps': [2, 4]
+        'learning_rate': [0.0001],
+        'weight_decay': [0.1],
+        'num_epochs': [30],
+        'accumulation_steps': [4]
     }
 
     # Perform hyperparameter tuning
-    best_params = hyperparameter_tuning(base_dir, train_loader, val_loader, param_grid, device)
+    best_params = hyperparameter_tuning(base_dir, train_loader, val_loader, param_grid, device, f'resnet_besttfinal_model.pth')
     print(f"Best hyperparameters: {best_params}")
 
-    best_params['epochs'] = 10
-    hyperparameter_tuning(base_dir, train_loader, val_loader, best_params, device)
     # Save the best hyperparameters to a text file
-    best_params_path = os.path.join(base_dir, '../model', 'best_params.txt')
-    with open(best_params_path, 'w') as f:
-        for key, value in best_params.items():
-            f.write(f"{key}: {value}\n")
-    print(f"Best hyperparameters saved to {best_params_path}")
+    # best_params_path = os.path.join(base_dir, '../model', 'best_params_cnn.txt')
+    # with open(best_params_path, 'w') as f:
+    #     for key, value in best_params.items():
+    #         f.write(f"{key}: {value}\n")
+    # print(f"Best hyperparameters saved to {best_params_path}")
 
 if __name__ == "__main__":
     main()
