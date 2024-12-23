@@ -30,7 +30,7 @@ def feature_extraction(image_dir, feature_array_filepath):
 
     if (os.path.isfile(feature_array_filepath)):    #array already exists
         subfolder_path = str(Path(feature_array_filepath).parts[-2:]).replace("'", "").replace("(", "").replace(")", "").replace(", ", "/")   #gets the last 2 subdirs, and turns tuple back to string
-        proceed = input("Feature array already exists in " + subfolder_path + ", do you want to delete it and proceed? (y/n)")
+        proceed = input("Feature array already exists in " + subfolder_path + ", do you want to re-extract features? (y/n)")
         while proceed != "y" and proceed != "n":
             proceed = input("Invalid input, do you want to extract features again? (y/n)")
         if proceed == "n":
@@ -92,8 +92,8 @@ def visualise_hog_feature(image_filepath):
     ax2.set_title('Histogram of Oriented Gradients')
     plt.show()
 
-def hyperparameter_tuning_sgd(train_feature_array, val_feature_array, train_labels, val_labels):
-    print("Hyperparameter tuning on training and validation data")
+def hyperparameter_tuning_sgd(train_feature_array, val_feature_array, train_labels, val_labels, project_dir):
+    print("\nHyperparameter tuning on training and validation data")
 
     #combine the training and validation data
     train_val_feature_array = np.concatenate([train_feature_array, val_feature_array])
@@ -106,23 +106,26 @@ def hyperparameter_tuning_sgd(train_feature_array, val_feature_array, train_labe
 
     #define the parameter grid
     param_grid = {
-        'sgd__alpha': [10**-i for i in range(1, 7)],   #Regularisation, for generalisation
-        'sgd__max_iter': [100, 1000],     #a reasonable first guess for the number of iterations is max_iter = np.ceil(10**6 / n)
-        'sgd__learning_rate': ['optimal', 'constant', 'invscaling', 'adaptive'],
-        'sgd__tol': [1e-2, 1e-3, 1e-4],          #tolerance for the stopping criterion
-        'sgd__verbose': [10],        #for showing progress
-        'sgd__loss': ['hinge'],      #SGDClassifier uses hinge loss for linear SVM
-        'sgd__random_state': [42]
+        'sgd__alpha': [0.001, 0.0001],   #Regularisation, for generalisation
+        'sgd__learning_rate': ['optimal', 'adaptive'],
+        'sgd__average': [True, False],   #Averaged SGD works best with a larger number of features and a higher eta0
+        'sgd__eta0': [0.001, 0.0001],   #learning rate for the initial step size
     }
 
     #need to standardise the data (mean 0, std 1), pipeline with SGDClassifier
-    pipeline = Pipeline([('scaler', StandardScaler()), ('sgd', SGDClassifier())])
+    pipeline = Pipeline([('scaler', StandardScaler()), ('sgd', SGDClassifier(loss='hinge', max_iter=500, tol=1e-3, random_state=42, verbose=1))])
 
     #perform hyperparameter tuning on the SGDClassifier searching the parameter grid
     #cross validation is done using the PredefinedSplit (preset the train and validation data)
-    #minimise the log loss (cross entropy) - GridSearchCV maximises scoring, so negate it
-    grid_search = GridSearchCV(pipeline, param_grid, cv=ps, scoring='neg_log_loss', n_jobs=-1, verbose=3)
+    #maximise the accuracy to find the best hyperparameters, higher val accuracy ~ lower val cross entropy loss
+    #refit: do not refit the model, since this is only one-fold cross validation and uses PredefinedSplit
+    grid_search = GridSearchCV(pipeline, param_grid, cv=ps, scoring='accuracy', n_jobs=1, refit=False, verbose=3)
     grid_search.fit(train_val_feature_array, train_val_labels)
+
+    #append it to the hyperparameters file just as a copy
+    os.makedirs(os.path.dirname(os.path.join(project_dir, 'src', 'hyperparameters')), exist_ok=True)
+    with open(os.path.join(project_dir, 'src', 'hyperparameters', 'sgd-best-params.txt'), 'a') as f:
+        f.write("\n" + str(grid_search.best_params_))
 
     return grid_search.best_params_
 
@@ -200,7 +203,8 @@ def main():
     del val_no_pain_array
 
     #perform hyperparameter tuning on training+validation data
-    best_params = hyperparameter_tuning_sgd(training_array, validation_array, training_labels, validation_labels)
+    best_params = hyperparameter_tuning_sgd(training_array, validation_array, training_labels, validation_labels, project_dir)
+    best_params = {key.split('__')[1]: value for key, value in best_params.items()}   #remove the sgd__ prefix
     print("Best parameters:", best_params)
 
     #train the model only on the training data, and save it
