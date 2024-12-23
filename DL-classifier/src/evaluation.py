@@ -58,8 +58,12 @@ def load_transformer_model(device):
     return transformer_model
 
 def calculate_fairness_metrics(labels, preds, ids):
-    male_indices = [i for i, id in enumerate(ids) if id in male_ids]
-    female_indices = [i for i, id in enumerate(ids) if id in female_ids]
+    print(f"Length of labels: {len(labels)}")
+    print(f"Length of preds: {len(preds)}")
+    print(f"Length of ids: {len(ids)}")
+
+    male_indices = [i for i, id in enumerate(ids) if id in male_ids and i < len(labels)]
+    female_indices = [i for i, id in enumerate(ids) if id in female_ids and i < len(labels)]
 
     male_labels = [labels[i] for i in male_indices]
     male_preds = [preds[i] for i in male_indices]
@@ -143,7 +147,8 @@ def evaluate_model(model, device, base_dir):
             all_labels.extend(labels.cpu().numpy())
             all_probs.extend(torch.softmax(outputs, dim=1)[:, 1].cpu().numpy())
             all_preds.extend(predicted.cpu().numpy())
-            all_ids.extend([os.path.basename(path)[:5] for path, _ in test_loader.dataset.samples])
+            batch_ids = [os.path.basename(path)[:5] for path, _ in test_loader.dataset.samples[total - labels.size(0):total]]
+            all_ids.extend(batch_ids)
 
     test_loss /= len(test_loader)
     test_accuracy = 100 * correct / total
@@ -217,7 +222,7 @@ if __name__ == "__main__":
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    model_type = 'transformer'  # Change this to 'transformer' to evaluate the transformer model
+    model_type = 'cnn'  # Change this to 'transformer' to evaluate the transformer model
 
     if model_type == 'cnn':
         model = load_cnn_model(device)
@@ -241,4 +246,5 @@ if __name__ == "__main__":
     print("Test data gender distribution:")
     print_gender_distribution(test_dir)
 
+    print("Evaluating model...", model_type)
     evaluate_model(model, device, base_dir)

@@ -152,7 +152,7 @@ def main():
     }
 
     # Perform hyperparameter tuning
-    best_params = hyperparameter_tuning(base_dir, train_loader, val_loader, param_grid, device, f'resnet_besttfinal_model.pth')
+    best_params = hyperparameter_tuning(base_dir, train_loader, val_loader, param_grid, device, f'resnet_bestfinal_model.pth')
     print(f"Best hyperparameters: {best_params}")
 
     # Save the best hyperparameters to a text file
