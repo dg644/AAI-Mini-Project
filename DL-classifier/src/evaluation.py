@@ -97,7 +97,18 @@ def calculate_fairness_metrics(labels, preds, ids):
     test_fairness = abs(minority_accuracy - majority_accuracy)
     conditional_statistical_parity = abs(minority_tpr - majority_tpr)
 
-    return equal_accuracy, equal_opportunity, equalized_odds, disparate_impact, demographic_parity, treatment_equality, test_fairness, conditional_statistical_parity
+    # Confusion matrix details
+    male_tp = male_cm[1, 1]
+    male_fp = male_cm[0, 1]
+    male_tn = male_cm[0, 0]
+    male_fn = male_cm[1, 0]
+
+    female_tp = female_cm[1, 1]
+    female_fp = female_cm[0, 1]
+    female_tn = female_cm[0, 0]
+    female_fn = female_cm[1, 0]
+
+    return equal_accuracy, equal_opportunity, equalized_odds, disparate_impact, demographic_parity, treatment_equality, test_fairness, conditional_statistical_parity, male_tp, male_fp, male_tn, male_fn, female_tp, female_fp, female_tn, female_fn
 
 def evaluate_model(model, device, base_dir):
     criterion = nn.CrossEntropyLoss()  # define the loss function
@@ -144,7 +155,8 @@ def evaluate_model(model, device, base_dir):
     print(f'Total: {total}, Correct: {correct}')
     print(f'F1 Score: {f1:.4f}, ROC AUC: {auc:.4f}')
 
-    equal_accuracy, equal_opportunity, equalized_odds, disparate_impact, demographic_parity, treatment_equality, test_fairness, conditional_statistical_parity = calculate_fairness_metrics(all_labels, all_preds, all_ids)
+    metrics = calculate_fairness_metrics(all_labels, all_preds, all_ids)
+    equal_accuracy, equal_opportunity, equalized_odds, disparate_impact, demographic_parity, treatment_equality, test_fairness, conditional_statistical_parity, male_tp, male_fp, male_tn, male_fn, female_tp, female_fp, female_tn, female_fn = metrics
 
     print(f'Equal Accuracy: {equal_accuracy:.4f}')
     print(f'Equal Opportunity: {equal_opportunity:.4f}')
@@ -154,6 +166,8 @@ def evaluate_model(model, device, base_dir):
     print(f'Treatment Equality: {treatment_equality:.4f}')
     print(f'Test Fairness: {test_fairness:.4f}')
     print(f'Conditional Statistical Parity: {conditional_statistical_parity:.4f}')
+    print(f'Male - TP: {male_tp}, FP: {male_fp}, TN: {male_tn}, FN: {male_fn}')
+    print(f'Female - TP: {female_tp}, FP: {female_fp}, TN: {female_tn}, FN: {female_fn}')
 
     return test_accuracy, f1, auc, equal_accuracy, equal_opportunity, equalized_odds, disparate_impact, demographic_parity, treatment_equality, test_fairness, conditional_statistical_parity
 
