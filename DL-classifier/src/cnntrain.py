@@ -69,6 +69,11 @@ def train(model, loader, optimizer, criterion, device, accumulation_steps):
 
         running_loss += loss.item() * accumulation_steps
 
+        # sleep for 10 seconds to let laptop cool down
+        if (i + 1) % (200) == 0:
+            print("Sleeping for 10 seconds...")
+            time.sleep(10)
+
     return running_loss / len(loader)
 
 # Validate model
