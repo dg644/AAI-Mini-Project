@@ -1,0 +1,4 @@
+{'nystroem__gamma': 0.0001, 'nystroem__n_components': 500, 'sgd__alpha': 0.0001}
+{'nystroem__gamma': 0.0001, 'nystroem__n_components': 2000, 'sgd__alpha': 1e-05}
+{'nystroem__gamma': 0.0001, 'nystroem__n_components': 2000, 'sgd__alpha': 1e-05}
+{'nystroem__gamma': 0.001, 'nystroem__n_components': 5000, 'sgd__alpha': 1e-07}
