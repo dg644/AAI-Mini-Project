@@ -38,33 +38,32 @@ def feature_extraction(image_dir, feature_array_filepath):
                 feature_arrays = pickle.load(f)
             return feature_arrays
         
-    else:
-        #extract features
+    #otherwise, extract features
 
-        #check the image directory exists
-        if not os.path.exists(image_dir):
-            print("ERROR: Image directory does not exist: " + image_dir)
-            return
+    #check the image directory exists
+    if not os.path.exists(image_dir):
+        print("ERROR: Image directory does not exist: " + image_dir)
+        return
 
-        image_files = os.listdir(image_dir)   #get all the image files in the directory
+    image_files = os.listdir(image_dir)   #get all the image files in the directory
 
-        image_subfolder = str(Path(image_dir).parts[-2:]).replace("'", "").replace("(", "").replace(")", "").replace(", ", "/")
-        for file in tqdm(image_files, desc="Feature extraction on " + image_subfolder):
-            image = Image.open(os.path.join(image_dir, file))
-            image = image.convert('L')   #convert to grayscale for HOG
-            image = image.resize((224,224))
-            image = np.array(image)
-            hog_features = hog(image, pixels_per_cell=(16,16),     #Then number of features = 13*13*2*2*9 = 6,084 features (where 13 = 224/16-1), which is a good reduction 
-            cells_per_block=(2, 2), 
-            orientations=9, 
-            block_norm='L2-Hys')  # extract HOG features - also flattens it to 1D array
-            feature_arrays.append(hog_features)  
-    
-        os.makedirs(os.path.dirname(feature_array_filepath), exist_ok=True)
-        with open(feature_array_filepath, 'wb') as f:
-            pickle.dump(feature_arrays, f)
+    image_subfolder = str(Path(image_dir).parts[-2:]).replace("'", "").replace("(", "").replace(")", "").replace(", ", "/")
+    for file in tqdm(image_files, desc="Feature extraction on " + image_subfolder):
+        image = Image.open(os.path.join(image_dir, file))
+        image = image.convert('L')   #convert to grayscale for HOG
+        image = image.resize((224,224))
+        image = np.array(image)
+        hog_features = hog(image, pixels_per_cell=(16,16),     #Then number of features = 13*13*2*2*9 = 6,084 features (where 13 = 224/16-1), which is a good reduction 
+        cells_per_block=(2, 2), 
+        orientations=9, 
+        block_norm='L2-Hys')  # extract HOG features - also flattens it to 1D array
+        feature_arrays.append(hog_features)  
 
-        return feature_arrays
+    os.makedirs(os.path.dirname(feature_array_filepath), exist_ok=True)
+    with open(feature_array_filepath, 'wb') as f:
+        pickle.dump(feature_arrays, f)
+
+    return feature_arrays
 
 ###NOTE: just a method to visualise a hog features for a single image
 def visualise_hog_feature(image_filepath):
@@ -113,7 +112,7 @@ def hyperparameter_tuning_sgd(train_feature_array, val_feature_array, train_labe
     }
 
     #need to standardise the data (mean 0, std 1), pipeline with SGDClassifier
-    pipeline = Pipeline([('scaler', StandardScaler()), ('sgd', SGDClassifier(loss='hinge', max_iter=500, tol=1e-3, random_state=42, verbose=1))])
+    pipeline = Pipeline([('scaler', StandardScaler()), ('sgd', SGDClassifier(loss='hinge', max_iter=500, tol=1e-3, random_state=42, verbose=0))])
 
     #perform hyperparameter tuning on the SGDClassifier searching the parameter grid
     #cross validation is done using the PredefinedSplit (preset the train and validation data)
@@ -138,9 +137,11 @@ def train_sgd(train_feature_array, train_labels, best_params, model_save_filepat
         if proceed == "n":
             return     #return, don't save the model
     
+    print("\nTraining SGDClassifier and saving the model")
+
     #create the pipeline again with the feature scaler
     #add the best parameters
-    pipeline = Pipeline([('scaler', StandardScaler()), ('sgd', SGDClassifier(**best_params))])
+    pipeline = Pipeline([('scaler', StandardScaler()), ('sgd', SGDClassifier(**best_params, max_iter=500, tol=1e-3, random_state=42, verbose=0))])
 
     #train the model
     pipeline.fit(train_feature_array, train_labels)
