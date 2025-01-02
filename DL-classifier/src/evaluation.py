@@ -93,10 +93,13 @@ def calculate_fairness_metrics(labels, preds, ids):
     equal_accuracy = abs(minority_accuracy - majority_accuracy)
     equal_opportunity = abs(minority_tpr - majority_tpr)
     equalized_odds = abs((minority_tpr - majority_tpr) + (minority_fpr - majority_fpr)) / 2
-    disparate_impact = minority_tpr / majority_tpr
+
+    male_pred_positive_rate = sum(male_preds) / len(male_preds)
+    female_pred_positive_rate = sum(female_preds) / len(female_preds)
+    disparate_impact = male_pred_positive_rate / female_pred_positive_rate
 
     # Additional fairness metrics
-    demographic_parity = abs(sum(male_preds) / len(male_preds) - sum(female_preds) / len(female_preds))
+    demographic_parity = abs(male_pred_positive_rate - female_pred_positive_rate)
     treatment_equality = abs(minority_fpr / minority_tpr - majority_fpr / majority_tpr)
     test_fairness = abs(sum([1 for i in range(len(male_labels)) if male_labels[i] == 1 and male_preds[i] == 1]) / len(male_labels) - sum([1 for i in range(len(female_labels)) if female_labels[i] == 1 and female_preds[i] == 1]) / len(female_labels))
     
