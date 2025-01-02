@@ -13,6 +13,7 @@ from skimage.io import imread
 from skimage.transform import rescale
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import SGDClassifier
+from sklearn.model_selection import GridSearchCV
 import pickle
 
 
@@ -39,7 +40,8 @@ if not(os.path.exists(os.path.join(project_dir, 'processed-array', 'pain-train-a
         
     for file in tqdm(no_pain_image_files, desc="Converting no pain images"):
         image = imread(os.path.join(project_dir, 'data', 'train', 'no-pain', file), as_gray=True)
-        image = rescale(image, (224/image.shape[0], 224/image.shape[1]), mode='edge') # resize the image to 224x224 by extending the edgre pixels
+        ###QUESTION: why am I not using resize(224,224) here?
+        image = rescale(image, (224/image.shape[0], 224/image.shape[1]), mode='edge') # resize the image to 224x224 by extending the edge pixels
         image_hog = hog(image, pixels_per_cell=(14,14), 
         cells_per_block=(2, 2), 
         orientations=9, 
