@@ -98,8 +98,8 @@ def calculate_fairness_metrics(labels, preds, ids):
     # Additional fairness metrics
     demographic_parity = abs(sum(male_preds) / len(male_preds) - sum(female_preds) / len(female_preds))
     treatment_equality = abs(minority_fpr / minority_tpr - majority_fpr / majority_tpr)
-    test_fairness = abs(minority_accuracy - majority_accuracy)
-    conditional_statistical_parity = abs(minority_tpr - majority_tpr)
+    test_fairness = abs(sum([1 for i in range(len(male_labels)) if male_labels[i] == 1 and male_preds[i] == 1]) / len(male_labels) - sum([1 for i in range(len(female_labels)) if female_labels[i] == 1 and female_preds[i] == 1]) / len(female_labels))
+    conditional_statistical_parity = abs(sum([1 for i in range(len(male_labels)) if male_labels[i] == 1]) / len(male_labels) - sum([1 for i in range(len(female_labels)) if female_labels[i] == 1]) / len(female_labels))
 
     # Confusion matrix details
     male_tp = male_cm[1, 1]
