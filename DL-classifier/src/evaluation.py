@@ -90,22 +90,51 @@ def calculate_fairness_metrics(labels, preds, ids):
     majority_accuracy = female_accuracy
     minority_accuracy = male_accuracy
 
+    # Confusion matrix details
+    male_tp = male_cm[1, 1]
+    male_fp = male_cm[0, 1]
+    male_tn = male_cm[0, 0]
+    male_fn = male_cm[1, 0]
+
+    female_tp = female_cm[1, 1]
+    female_fp = female_cm[0, 1]
+    female_tn = female_cm[0, 0]
+    female_fn = female_cm[1, 0]
+
+    #fairness metrics
+
     equal_accuracy = abs(minority_accuracy - majority_accuracy)
     equal_opportunity = abs(minority_tpr - majority_tpr)
     equalized_odds = abs((minority_tpr - majority_tpr) + (minority_fpr - majority_fpr)) / 2
 
     male_pred_positive_rate = sum(male_preds) / len(male_preds)
     female_pred_positive_rate = sum(female_preds) / len(female_preds)
+    print(f"Male pred positive rate: {male_pred_positive_rate:.4f}")
+    print(f"Female pred positive rate: {female_pred_positive_rate:.4f}")
     disparate_impact = male_pred_positive_rate / female_pred_positive_rate
 
     # Additional fairness metrics
     demographic_parity = abs(male_pred_positive_rate - female_pred_positive_rate)
-    treatment_equality = abs(minority_fpr / minority_tpr - majority_fpr / majority_tpr)
-    test_fairness = abs(sum([1 for i in range(len(male_labels)) if male_labels[i] == 1 and male_preds[i] == 1]) / len(male_labels) - sum([1 for i in range(len(female_labels)) if female_labels[i] == 1 and female_preds[i] == 1]) / len(female_labels))
-    
-    male_positive_rate = sum([1 for i in range(len(male_labels)) if male_labels[i] == 1]) / len(male_labels)
-    female_positive_rate = sum([1 for i in range(len(female_labels)) if female_labels[i] == 1]) / len(female_labels)
-    conditional_statistical_parity = abs(male_positive_rate - female_positive_rate)
+    treatment_equality = abs(male_fn / male_fp - female_fn / female_fp)
+
+    #P(Y=pain|Y_hat=pain, Male)
+    male_pos_pos_prob = sum([1 for i in range(len(male_labels)) if male_labels[i] == 1 and male_preds[i] == 1]) / len(male_labels)
+    male_pos_pos_cond_prob = male_pos_pos_prob / male_pred_positive_rate
+    #P(Y=pain|Y_hat=no-pain, Male)
+    male_pos_neg_prob = sum([1 for i in range(len(male_labels)) if male_labels[i] == 1 and male_preds[i] == 0]) / len(male_labels)
+    male_pos_neg_cond_prob = male_pos_neg_prob / (1 - male_pred_positive_rate)
+
+    female_pos_pos_prob = sum([1 for i in range(len(female_labels)) if female_labels[i] == 1 and female_preds[i] == 1]) / len(female_labels)
+    female_pos_pos_cond_prob = female_pos_pos_prob / female_pred_positive_rate
+    female_pos_neg_prob = sum([1 for i in range(len(female_labels)) if female_labels[i] == 1 and female_preds[i] == 0]) / len(female_labels)
+    female_pos_neg_cond_prob = female_pos_neg_prob / (1 - female_pred_positive_rate)
+
+        #take the average difference for the two different predicted value cases
+    test_fairness = abs((male_pos_pos_cond_prob - female_pos_pos_cond_prob) + (male_pos_neg_cond_prob - female_pos_neg_cond_prob)) / 2
+
+    # male_positive_rate = sum([1 for i in range(len(male_labels)) if male_labels[i] == 1]) / len(male_labels)
+    # female_positive_rate = sum([1 for i in range(len(female_labels)) if female_labels[i] == 1]) / len(female_labels)
+    conditional_statistical_parity = 1
 
     # Confusion matrix details
     male_tp = male_cm[1, 1]
