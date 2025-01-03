@@ -3,6 +3,7 @@ import numpy as np
 from tqdm import tqdm
 from skimage.feature import hog
 from sklearn.metrics import f1_score, roc_auc_score, accuracy_score, hinge_loss
+# from aif360.metrics import equal_opportunity_difference, average_odds_difference, disparate_impact_ratio, statistical_parity_difference
 import pickle
 from PIL import Image
 from pathlib import Path
@@ -117,16 +118,53 @@ def calculate_fairness_metrics(labels, preds, ids, male_ids, female_ids):
     majority_accuracy = female_accuracy
     minority_accuracy = male_accuracy
 
+    # Confusion matrix details
+    male_tp = male_cm[1, 1]
+    male_fp = male_cm[0, 1]
+    male_tn = male_cm[0, 0]
+    male_fn = male_cm[1, 0]
+
+    female_tp = female_cm[1, 1]
+    female_fp = female_cm[0, 1]
+    female_tn = female_cm[0, 0]
+    female_fn = female_cm[1, 0]
+
+    #fairness metrics
+
     equal_accuracy = abs(minority_accuracy - majority_accuracy)
     equal_opportunity = abs(minority_tpr - majority_tpr)
     equalized_odds = abs((minority_tpr - majority_tpr) + (minority_fpr - majority_fpr)) / 2
-    disparate_impact = minority_tpr / majority_tpr
+
+    male_pred_positive_rate = sum(male_preds) / len(male_preds)
+    female_pred_positive_rate = sum(female_preds) / len(female_preds)
+    print(f"Male pred positive rate: {male_pred_positive_rate:.4f}")
+    print(f"Female pred positive rate: {female_pred_positive_rate:.4f}")
+    disparate_impact = male_pred_positive_rate / female_pred_positive_rate
 
     # Additional fairness metrics
-    demographic_parity = abs(sum(male_preds) / len(male_preds) - sum(female_preds) / len(female_preds))
-    treatment_equality = abs(minority_fpr / minority_tpr - majority_fpr / majority_tpr)
-    test_fairness = abs(minority_accuracy - majority_accuracy)
-    conditional_statistical_parity = abs(minority_tpr - majority_tpr)
+    demographic_parity = abs(male_pred_positive_rate - female_pred_positive_rate)
+    treatment_equality = abs(male_fn / male_fp - female_fn / female_fp)
+
+    #P(Y=pain|Y_hat=pain, Male)
+    male_pos_pos_prob = sum([1 for i in range(len(male_labels)) if male_labels[i] == 1 and male_preds[i] == 1]) / len(male_labels)
+    male_pos_pos_cond_prob = male_pos_pos_prob / male_pred_positive_rate
+    #P(Y=pain|Y_hat=no-pain, Male)
+    male_pos_neg_prob = sum([1 for i in range(len(male_labels)) if male_labels[i] == 1 and male_preds[i] == 0]) / len(male_labels)
+    male_pos_neg_cond_prob = male_pos_neg_prob / (1 - male_pred_positive_rate)
+
+    female_pos_pos_prob = sum([1 for i in range(len(female_labels)) if female_labels[i] == 1 and female_preds[i] == 1]) / len(female_labels)
+    female_pos_pos_cond_prob = female_pos_pos_prob / female_pred_positive_rate
+    female_pos_neg_prob = sum([1 for i in range(len(female_labels)) if female_labels[i] == 1 and female_preds[i] == 0]) / len(female_labels)
+    female_pos_neg_cond_prob = female_pos_neg_prob / (1 - female_pred_positive_rate)
+
+        #take the average difference for the two different predicted value cases
+    test_fairness = abs((male_pos_pos_cond_prob - female_pos_pos_cond_prob) + (male_pos_neg_cond_prob - female_pos_neg_cond_prob)) / 2
+
+    # male_positive_rate = sum([1 for i in range(len(male_labels)) if male_labels[i] == 1]) / len(male_labels)
+    # female_positive_rate = sum([1 for i in range(len(female_labels)) if female_labels[i] == 1]) / len(female_labels)
+    # conditional_statistical_parity = abs(male_positive_rate - female_positive_rate)
+
+
 
     # Confusion matrix details
     male_tp = male_cm[1, 1]
@@ -139,7 +177,7 @@ def calculate_fairness_metrics(labels, preds, ids, male_ids, female_ids):
     female_tn = female_cm[0, 0]
     female_fn = female_cm[1, 0]
 
-    return equal_accuracy, equal_opportunity, equalized_odds, disparate_impact, demographic_parity, treatment_equality, test_fairness, conditional_statistical_parity, male_tp, male_fp, male_tn, male_fn, female_tp, female_fp, female_tn, female_fn
+    return equal_accuracy, equal_opportunity, equalized_odds, disparate_impact, demographic_parity, treatment_equality, test_fairness, male_tp, male_fp, male_tn, male_fn, female_tp, female_fp, female_tn, female_fn
 
 
 def main():
@@ -175,7 +213,8 @@ def main():
     del test_no_pain_array
 
     # Load trained model from file
-    model_filepath = os.path.join(project_dir, 'model','sgd_classifier-on-augmented-data-final.pkl')
+    model_filepath = os.path.join(project_dir, 'model','sgd_classifier-on-augmented-data.pkl')
+    # model_filepath = os.path.join(project_dir, 'model','rbf-on-augmented-data.pkl')
     if not os.path.isfile(model_filepath):
         print("ERROR: Model file does not exist: " + model_filepath)
         return
@@ -205,7 +244,7 @@ def main():
 
     #fairness metrics      
     metrics = calculate_fairness_metrics(all_labels, all_predictions, all_ids, male_ids, female_ids)
-    equal_accuracy, equal_opportunity, equalized_odds, disparate_impact, demographic_parity, treatment_equality, test_fairness, conditional_statistical_parity, male_tp, male_fp, male_tn, male_fn, female_tp, female_fp, female_tn, female_fn = metrics
+    equal_accuracy, equal_opportunity, equalized_odds, disparate_impact, demographic_parity, treatment_equality, test_fairness, male_tp, male_fp, male_tn, male_fn, female_tp, female_fp, female_tn, female_fn = metrics
 
     print(f'\nEqual Accuracy: {equal_accuracy:.4f}')
     print(f'Equal Opportunity: {equal_opportunity:.4f}')
@@ -214,7 +253,7 @@ def main():
     print(f'Demographic Parity: {demographic_parity:.4f}')
     print(f'Treatment Equality: {treatment_equality:.4f}')
     print(f'Test Fairness: {test_fairness:.4f}')
-    print(f'Conditional Statistical Parity: {conditional_statistical_parity:.4f}')
+    # print(f'Conditional Statistical Parity: {conditional_statistical_parity:.4f}')
 
     print("\nConfusion matrix:")
     print(f'Male - TP: {male_tp}, FP: {male_fp}, TN: {male_tn}, FN: {male_fn}')
@@ -226,6 +265,26 @@ def main():
     print("Test data gender distribution:")
     print_gender_distribution(test_dir, male_ids, female_ids)
 
+    validation_dir = os.path.join(project_dir, 'data', 'val')
+    print("Training pain data count:")
+    print(len(os.listdir(os.path.join(train_dir, 'pain'))))
+    print("Training no-pain data count:")
+    print(len(os.listdir(os.path.join(train_dir, 'no-pain'))))
+    print("Validation pain data count:")
+    print(len(os.listdir(os.path.join(validation_dir, 'pain'))))
+    print("Validation no-pain data count:")
+    print(len(os.listdir(os.path.join(validation_dir, 'no-pain'))))
+    print("Test pain data count:")
+    print(len(os.listdir(test_pain_image_dir)))
+    print("Test no-pain data count:")
+    print(len(os.listdir(test_no_pain_image_dir)))
+
+    print("Feature vector dimension")
+    print(len(test_image_numpy_data[0]))
+
+    print("Original training data gender distribution:")
+    orig_train_dir = os.path.join(project_dir, 'data', 'train')
+    print_gender_distribution(orig_train_dir, male_ids, female_ids)
 
 
 if __name__ == "__main__":
